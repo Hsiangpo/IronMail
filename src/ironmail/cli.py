@@ -28,11 +28,11 @@ def run_console(
     """运行终端主菜单"""
     while True:
         config = config_manager.load_config(config_path)
-        clear_screen(input_func, print_func)
+        clear_screen(input_func, print_func, force=True)
         show_main_menu(config, print_func, license_verified)
         choice = input_func("请选择功能: ").strip()
         if choice == "1":
-            clear_screen(input_func, print_func)
+            clear_screen(input_func, print_func, force=True)
             start_send()
             pause_after_action(input_func, print_func)
         elif choice == "2":
@@ -527,8 +527,11 @@ def smtp_failure_hint(error: Exception) -> str:
     )
 
 
-def clear_screen(input_func: InputFunc, print_func: PrintFunc) -> None:
+def clear_screen(input_func: InputFunc, print_func: PrintFunc, force: bool = False) -> None:
     """真实终端下清屏，测试注入输入时不输出控制字符。"""
+    if force and is_builtin_console(input_func, print_func):
+        print_func("\033[2J\033[H", end="")
+        return
     if not is_real_terminal(input_func, print_func):
         return
     print_func("\033[2J\033[H", end="")
@@ -543,9 +546,9 @@ def pause_after_action(input_func: InputFunc, print_func: PrintFunc) -> None:
 
 def is_real_terminal(input_func: InputFunc, print_func: PrintFunc) -> bool:
     """判断是否是正常命令行交互，不影响测试注入。"""
-    return (
-        input_func is builtins.input
-        and print_func is builtins.print
-        and sys.stdin.isatty()
-        and sys.stdout.isatty()
-    )
+    return is_builtin_console(input_func, print_func) and sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def is_builtin_console(input_func: InputFunc, print_func: PrintFunc) -> bool:
+    """判断是否使用系统默认输入输出函数。"""
+    return input_func is builtins.input and print_func is builtins.print

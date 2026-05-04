@@ -210,6 +210,21 @@ def test_console_clears_before_starting_send(monkeypatch, tmp_path):
     assert clear_count >= 2
 
 
+def test_console_forces_clear_for_builtin_terminal_even_when_isatty_false(monkeypatch, tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    inputs = iter(["0"])
+    output = []
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    monkeypatch.setattr("builtins.print", lambda text="", end="\n": output.append((text, end)))
+    monkeypatch.setattr("ironmail.cli.sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr("ironmail.cli.sys.stdout.isatty", lambda: False)
+
+    cli.run_console(config_path, lambda: None, input, print, license_verified=True)
+
+    assert ("\033[2J\033[H", "") in output
+
+
 def test_smtp_setup_guide_mentions_gmail_app_password():
     output = []
 
