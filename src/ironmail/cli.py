@@ -42,16 +42,8 @@ def run_console(
         elif choice == "2":
             manage_senders(config_path, input_func, print_func)
         elif choice == "3":
-            clear_screen(input_func, print_func)
-            manage_send_settings(config_path, input_func, print_func)
-            pause_after_action(input_func, print_func)
-        elif choice == "4":
-            clear_screen(input_func, print_func)
-            manage_license(config_path, input_func, print_func)
-            pause_after_action(input_func, print_func)
-        elif choice == "5":
             manage_templates(config_path, input_func, print_func)
-        elif choice == "6":
+        elif choice == "4":
             manage_config(config_path, input_func, print_func)
         elif choice == "0":
             print_func("已退出。")
@@ -89,10 +81,8 @@ def show_main_menu(
         [
             "1. 开始发送邮件",
             "2. 管理发件邮箱",
-            "3. 调整发送设置",
-            "4. 设置授权码",
-            "5. 管理邮件模板",
-            "6. 配置",
+            "3. 管理邮件模板",
+            "4. 配置",
             "0. 退出",
         ]
     )
