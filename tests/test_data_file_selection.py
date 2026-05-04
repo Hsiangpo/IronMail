@@ -41,6 +41,19 @@ def test_choose_data_file_prompts_when_multiple_files(tmp_path, monkeypatch):
     assert choose_data_file(tmp_path).name == "second.csv"
 
 
+def test_choose_data_file_can_return_to_main_menu(tmp_path, monkeypatch, capsys):
+    mails_dir = tmp_path / "Mails"
+    mails_dir.mkdir()
+    (mails_dir / "first.xlsx").write_text("x", encoding="utf-8")
+    (mails_dir / "second.csv").write_text("x", encoding="utf-8")
+    monkeypatch.setattr("builtins.input", lambda prompt="": "0")
+
+    assert choose_data_file(tmp_path) is None
+    output = capsys.readouterr().out
+    assert "选择收件人表格" in output
+    assert "0. 返回主菜单" in output
+
+
 def test_choose_data_file_reads_from_recipient_list_folder(tmp_path, monkeypatch):
     recipient_dir = tmp_path / "Mails" / "收件人名单"
     recipient_dir.mkdir(parents=True)
@@ -79,3 +92,13 @@ def test_choose_template_file_prompts_for_markdown_template(tmp_path, monkeypatc
     monkeypatch.setattr("builtins.input", lambda prompt="": "1")
 
     assert choose_template_file(tmp_path, allow_table_fields=False).name == "合作.md"
+
+
+def test_choose_template_file_can_return_to_main_menu(tmp_path, monkeypatch, capsys):
+    template_dir = tmp_path / "Mails" / "邮件模板"
+    template_dir.mkdir(parents=True)
+    (template_dir / "合作.md").write_text("邮件主题：测试\n\n邮件正文：测试", encoding="utf-8")
+    monkeypatch.setattr("builtins.input", lambda prompt="": "0")
+
+    assert choose_template_file(tmp_path, allow_table_fields=False) is None
+    assert "0. 返回主菜单" in capsys.readouterr().out

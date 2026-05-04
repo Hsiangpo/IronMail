@@ -185,7 +185,29 @@ def test_main_menu_shows_runtime_verified_license():
 
     cli.show_main_menu(config, output.append, license_verified=True)
 
-    assert any("授权状态: 本次已验证" in line for line in output)
+    joined = "\n".join(output)
+    assert "┌" in joined
+    assert "│ IronMail 控制台" in joined
+    assert "授权状态  本次已验证" in joined
+    assert "1. 开始发送邮件" in joined
+
+
+def test_console_clears_before_starting_send(monkeypatch, tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    inputs = iter(["1", "", "0"])
+    output = []
+    started = []
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    monkeypatch.setattr("builtins.print", lambda text="", end="\n": output.append((text, end)))
+    monkeypatch.setattr("ironmail.cli.sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("ironmail.cli.sys.stdout.isatty", lambda: True)
+
+    cli.run_console(config_path, lambda: started.append(True), input, print, license_verified=True)
+
+    clear_count = sum(1 for text, _ in output if text == "\033[2J\033[H")
+    assert started == [True]
+    assert clear_count >= 2
 
 
 def test_smtp_setup_guide_mentions_gmail_app_password():

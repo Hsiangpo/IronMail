@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import getpass
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
@@ -14,6 +15,7 @@ from ironmail import config_manager, mailer
 InputFunc = Callable[[str], str]
 PrintFunc = Callable[[str], None]
 BACK_COMMAND = "0"
+PANEL_WIDTH = 72
 
 
 def run_console(
@@ -30,6 +32,7 @@ def run_console(
         show_main_menu(config, print_func, license_verified)
         choice = input_func("请选择功能: ").strip()
         if choice == "1":
+            clear_screen(input_func, print_func)
             start_send()
             pause_after_action(input_func, print_func)
         elif choice == "2":
@@ -62,30 +65,33 @@ def show_main_menu(
     sender_count = len(config_manager.active_senders(config))
     settings = config.get("settings", {})
     license_code = config.get("license", {}).get("code")
-    print_header("IronMail 控制台", print_func)
     if license_verified:
         license_status = "本次已验证"
     else:
         license_status = "已填写授权码" if license_code else "未填写授权码"
-    print_func(f"授权状态: {license_status}")
-    print_func(f"发件邮箱: {sender_count} 个可用")
-    print_func(
-        f"发送策略: 每个邮箱连续 {settings.get('emails_per_account', 1)} 封后切换，"
-        f"间隔 {settings.get('delay_seconds', 12)} 秒"
-    )
+    panel_lines = [
+        f"授权状态  {license_status}",
+        f"发件邮箱  {sender_count} 个可用",
+        (
+            f"发送策略  每个邮箱连续 {settings.get('emails_per_account', 1)} 封后切换，"
+            f"间隔 {settings.get('delay_seconds', 12)} 秒"
+        ),
+        "",
+    ]
     if sender_count == 0:
-        print_func("下一步: 进入 2 管理发件邮箱，添加 Gmail 或 oldiron.us 邮箱。")
-    print_menu(
+        panel_lines.append("下一步  进入 2 管理发件邮箱，添加 Gmail 或 oldiron.us 邮箱。")
+        panel_lines.append("")
+    panel_lines.extend(
         [
-            ("1", "开始发送邮件"),
-            ("2", "管理发件邮箱"),
-            ("3", "调整发送设置"),
-            ("4", "设置授权码"),
-            ("5", "查看当前配置"),
-            ("0", "退出"),
-        ],
-        print_func,
+            "1. 开始发送邮件",
+            "2. 管理发件邮箱",
+            "3. 调整发送设置",
+            "4. 设置授权码",
+            "5. 查看当前配置",
+            "0. 退出",
+        ]
     )
+    print_panel("IronMail 控制台", panel_lines, print_func)
 
 
 def manage_senders(config_path: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
@@ -451,6 +457,32 @@ def print_menu(items: list[tuple[str, str]], print_func: PrintFunc) -> None:
     print_func("")
     for key, label in items:
         print_func(f"  {key}. {label}")
+
+
+def print_panel(title: str, lines: list[str], print_func: PrintFunc) -> None:
+    """打印统一控制面板"""
+    inner_width = PANEL_WIDTH - 4
+    print_func("┌" + "─" * (PANEL_WIDTH - 2) + "┐")
+    print_func(panel_line(title, inner_width))
+    print_func("├" + "─" * (PANEL_WIDTH - 2) + "┤")
+    for line in lines:
+        print_func(panel_line(line, inner_width))
+    print_func("└" + "─" * (PANEL_WIDTH - 2) + "┘")
+
+
+def panel_line(text: str, inner_width: int) -> str:
+    """格式化面板单行文本"""
+    visible_width = display_width(text)
+    padding = max(0, inner_width - visible_width)
+    return f"│ {text}{' ' * padding} │"
+
+
+def display_width(text: str) -> int:
+    """计算终端里的可见宽度"""
+    width = 0
+    for char in text:
+        width += 2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
+    return width
 
 
 def print_smtp_setup_guide(print_func: PrintFunc) -> None:

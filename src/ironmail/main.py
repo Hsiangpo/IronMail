@@ -66,6 +66,7 @@ LEGACY_TEMPLATE_DIR_NAME = "模板"
 REQUIRED_WITH_TEMPLATE = ["邮箱"]
 REQUIRED_WITHOUT_TEMPLATE = ["邮箱", "邮件主题", "邮件正文"]
 AUTH_PANEL_WIDTH = 72
+CHOICE_CANCEL = "__IRONMAIL_CANCEL__"
 
 
 def log_message(log_file: str, message: str):
@@ -205,7 +206,7 @@ def resolve_data_file(app_dir: Path, excel_file: str) -> Path:
     return data_path
 
 
-def choose_data_file(app_dir: Path, excel_file: Optional[str] = None) -> Path:
+def choose_data_file(app_dir: Path, excel_file: Optional[str] = None) -> Path | None:
     """选择本次发送要使用的表格"""
     data_dir = get_recipient_dir(app_dir)
     if excel_file:
@@ -218,20 +219,18 @@ def choose_data_file(app_dir: Path, excel_file: Optional[str] = None) -> Path:
         print(f"检测到 1 个表格，自动使用: {data_files[0].name}")
         return data_files[0]
 
-    print("\n请选择本次发送使用的表格:")
-    for index, file_path in enumerate(data_files, 1):
-        stat = file_path.stat()
-        modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
-        size_kb = max(1, round(stat.st_size / 1024))
-        print(f"{index}. {file_path.name} | {size_kb} KB | 修改时间 {modified}")
-
+    cli.clear_screen(input, print)
+    print_selection_panel("选择收件人表格", ["0. 返回主菜单"] + format_file_choices(data_files))
     while True:
-        raw_choice = input("请输入表格序号: ").strip()
+        raw_choice = input("请输入表格序号，输入0返回主菜单: ").strip()
         try:
             choice = int(raw_choice)
         except ValueError:
             print("请输入数字序号。")
             continue
+        if choice == 0:
+            print("已返回主菜单。")
+            return None
         if 1 <= choice <= len(data_files):
             return data_files[choice - 1]
         print("序号超出范围，请重新输入。")
@@ -247,7 +246,7 @@ def read_data_file(file_path: Path) -> pd.DataFrame:
         raise ValueError(f"不支持的文件格式: {file_path.suffix}")
 
 
-def choose_template_file(app_dir: Path, allow_table_fields: bool) -> Path | None:
+def choose_template_file(app_dir: Path, allow_table_fields: bool) -> Path | str | None:
     """选择本次发送要使用的邮件模板。"""
     template_dir = get_template_dir(app_dir)
     try:
@@ -263,27 +262,44 @@ def choose_template_file(app_dir: Path, allow_table_fields: bool) -> Path | None
             return None
         raise FileNotFoundError(f"未找到.md邮件模板，请将模板放入 {template_dir}")
 
-    print("\n请选择本次发送使用的邮件模板:")
+    cli.clear_screen(input, print)
+    choices = ["0. 返回主菜单"]
     if allow_table_fields:
-        print("0. 不使用模板，使用表格里的邮件主题和邮件正文")
-    for index, file_path in enumerate(template_files, 1):
-        stat = file_path.stat()
-        modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
-        size_kb = max(1, round(stat.st_size / 1024))
-        print(f"{index}. {file_path.name} | {size_kb} KB | 修改时间 {modified}")
+        choices.append("N. 不使用模板，使用表格里的邮件主题和邮件正文")
+    choices.extend(format_file_choices(template_files))
+    print_selection_panel("选择邮件模板", choices)
 
     while True:
-        raw_choice = input("请输入模板序号: ").strip()
+        raw_choice = input("请输入模板序号，输入0返回主菜单: ").strip()
+        if allow_table_fields and raw_choice.upper() == "N":
+            return None
         try:
             choice = int(raw_choice)
         except ValueError:
             print("请输入数字序号。")
             continue
-        if allow_table_fields and choice == 0:
-            return None
+        if choice == 0:
+            return CHOICE_CANCEL if allow_table_fields else None
         if 1 <= choice <= len(template_files):
             return template_files[choice - 1]
         print("序号超出范围，请重新输入。")
+
+
+def print_selection_panel(title: str, lines: list[str]) -> None:
+    """打印发送流程里的选择面板"""
+    print("")
+    cli.print_panel(title, lines, print)
+
+
+def format_file_choices(files: list[Path]) -> list[str]:
+    """格式化文件选择列表"""
+    choices = []
+    for index, file_path in enumerate(files, 1):
+        stat = file_path.stat()
+        modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+        size_kb = max(1, round(stat.st_size / 1024))
+        choices.append(f"{index}. {file_path.name} | {size_kb} KB | 修改时间 {modified}")
+    return choices
 
 
 def validate_email_dataframe(df: pd.DataFrame, use_template: bool) -> list[str]:
@@ -299,6 +315,9 @@ def apply_selected_template(app_dir: Path, df: pd.DataFrame) -> tuple[pd.DataFra
     """选择模板并渲染邮件主题和正文。"""
     has_table_content = {"邮件主题", "邮件正文"}.issubset(df.columns)
     template_path = choose_template_file(app_dir, allow_table_fields=has_table_content)
+    if template_path == CHOICE_CANCEL or (template_path is None and not has_table_content):
+        print("已返回主菜单。")
+        return None
     if not template_path:
         return df, None
 
@@ -382,6 +401,7 @@ def handle_partial_progress(state: dict) -> dict | None:
 
 def run_send_flow(app_dir: Path, config_path: Path):
     """执行完整发信流程"""
+    cli.clear_screen(input, print)
     print("正在加载配置...")
     config = config_manager.load_config(config_path)
 
@@ -401,6 +421,8 @@ def run_send_flow(app_dir: Path, config_path: Path):
     # 选择本次发送使用的表格，统一从Mails文件夹读取
     excel_file = config.get('excel_file')
     data_path = choose_data_file(app_dir, excel_file)
+    if data_path is None:
+        return
 
     print(f"正在读取数据文件: {data_path}")
     df = read_data_file(data_path)
