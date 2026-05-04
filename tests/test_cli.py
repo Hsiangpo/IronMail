@@ -297,9 +297,11 @@ def test_smtp_setup_guide_mentions_gmail_app_password():
     cli.print_smtp_setup_guide(output.append)
 
     joined = "\n".join(output)
+    assert "Gmail填写说明" in joined
+    assert "GMX填写说明" in joined
     assert "https://myaccount.google.com/apppasswords" in joined
     assert "16位应用专用密码" in joined
-    assert "GMX" in joined
+    assert "mail.gmx.com:465 SSL" in joined
 
 
 def test_smtp_failure_hint_explains_app_password_and_network():

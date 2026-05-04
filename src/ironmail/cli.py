@@ -773,12 +773,17 @@ def display_width(text: str) -> int:
 
 def print_smtp_setup_guide(print_func: PrintFunc) -> None:
     """打印发件邮箱配置指引。"""
-    print_func("填写说明:")
-    print_func("- 邮箱地址: 例如 yourname@gmail.com 或 yourname@gmx.com")
-    print_func("- 密码: Gmail 请填写16位应用专用密码；GMX 请填写SMTP密码或应用密码")
-    print_func("- 获取应用专用密码: https://myaccount.google.com/apppasswords")
-    print_func("- Google账号需要先开启两步验证，才会出现应用专用密码入口")
-    print_func("- SMTP服务器直接回车会自动识别: Gmail 用 smtp.gmail.com，GMX 用 mail.gmx.com")
+    print_func("Gmail填写说明:")
+    print_func("- 邮箱地址: 填 Gmail 邮箱，例如 yourname@gmail.com")
+    print_func("- 密码: 填 Google 生成的16位应用专用密码，不是网页登录密码")
+    print_func("- 准备步骤: 先开启 Google 两步验证，再访问 https://myaccount.google.com/apppasswords 生成应用专用密码")
+    print_func("- SMTP服务器: 直接回车，系统会自动使用 smtp.gmail.com:465 SSL")
+    print_func("")
+    print_func("GMX填写说明:")
+    print_func("- 邮箱地址: 填 GMX 邮箱，例如 yourname@gmx.com")
+    print_func("- 密码: 填 GMX 可用于SMTP的密码或应用密码")
+    print_func("- SMTP服务器: 直接回车，系统会自动使用 mail.gmx.com:465 SSL")
+    print_func("- 端口说明: 465 是 SSL；587 是 STARTTLS，默认先用 465")
     print_func("")
 
 
