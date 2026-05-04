@@ -32,7 +32,7 @@ def make_input(values):
     return lambda prompt="": next(iterator)
 
 
-def test_sender_menu_adds_gmail_default_sender(tmp_path):
+def test_sender_menu_adds_gmail_default_sender_after_smtp_test(tmp_path, monkeypatch):
     config_path = tmp_path / "config" / "config.yaml"
     write_config(config_path)
     inputs = make_input([
@@ -44,12 +44,46 @@ def test_sender_menu_adds_gmail_default_sender(tmp_path):
         "0",
     ])
     output = []
+    tested = []
+
+    def fake_test_smtp_login(smtp_config, sender):
+        tested.append((smtp_config["host"], sender["email"]))
+        return True
+
+    monkeypatch.setattr("ironmail.cli.mailer.test_smtp_login", fake_test_smtp_login)
 
     cli.manage_senders(config_path, inputs, output.append)
 
     config = config_manager.load_config(config_path)
     assert config["senders"][0]["email"] == "sales@oldiron.us"
     assert "smtp" not in config["senders"][0]
+    assert tested == [("smtp.gmail.com", "sales@oldiron.us")]
+    assert any("SMTP登录测试通过" in line for line in output)
+
+
+def test_sender_menu_does_not_save_when_smtp_test_fails(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    inputs = make_input([
+        "2",
+        "bad@gmail.com",
+        "Bad",
+        "wrong-password",
+        "",
+        "0",
+    ])
+    output = []
+
+    def fake_test_smtp_login(smtp_config, sender):
+        raise RuntimeError("Username and Password not accepted")
+
+    monkeypatch.setattr("ironmail.cli.mailer.test_smtp_login", fake_test_smtp_login)
+
+    cli.manage_senders(config_path, inputs, output.append)
+
+    assert config_manager.load_config(config_path)["senders"] == []
+    assert any("保存失败: SMTP登录测试未通过" in line for line in output)
+    assert any("应用专用密码" in line for line in output)
 
 
 def test_sender_menu_can_return_while_adding_sender(tmp_path):

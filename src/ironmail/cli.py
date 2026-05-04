@@ -195,6 +195,8 @@ def add_sender_interactive(
             smtp_port=smtp_port,
             smtp_use_ssl=smtp_use_ssl,
         )
+        if not validate_sender_login_before_save(config, sender, print_func):
+            return
         config_manager.add_sender(config, sender)
         config_manager.save_config(config_path, config)
         print_func("已保存发件邮箱。")
@@ -302,6 +304,20 @@ def test_one_sender(config: dict[str, Any], sender: dict[str, Any], print_func: 
         print_func(f"SMTP登录失败: {error}")
         print_func(smtp_failure_hint(error))
         return False
+
+
+def validate_sender_login_before_save(
+    config: dict[str, Any],
+    sender: dict[str, Any],
+    print_func: PrintFunc,
+) -> bool:
+    """保存发件邮箱前强制验证SMTP登录"""
+    print_func("正在验证SMTP登录，测试通过后才会保存...")
+    if test_one_sender(config, sender, print_func):
+        print_func("SMTP登录测试通过，正在保存发件邮箱。")
+        return True
+    print_func("保存失败: SMTP登录测试未通过，请检查邮箱、应用专用密码和SMTP配置。")
+    return False
 
 
 def pick_sender(
