@@ -13,6 +13,7 @@ from ironmail import config_manager, mailer
 
 InputFunc = Callable[[str], str]
 PrintFunc = Callable[[str], None]
+BACK_COMMAND = "0"
 
 
 def run_console(
@@ -101,7 +102,8 @@ def manage_senders(config_path: Path, input_func: InputFunc, print_func: PrintFu
                 ("2", "新增发件邮箱"),
                 ("3", "修改发件邮箱"),
                 ("4", "删除发件邮箱"),
-                ("5", "测试SMTP登录"),
+                ("5", "测试单个SMTP登录"),
+                ("6", "测试全部SMTP登录"),
                 ("0", "返回主菜单"),
             ],
             print_func,
@@ -127,6 +129,10 @@ def manage_senders(config_path: Path, input_func: InputFunc, print_func: PrintFu
         elif choice == "5":
             clear_screen(input_func, print_func)
             test_sender_interactive(config, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "6":
+            clear_screen(input_func, print_func)
+            test_all_senders_interactive(config, print_func)
             pause_after_action(input_func, print_func)
         elif choice == "0":
             return
@@ -161,13 +167,25 @@ def add_sender_interactive(
     """交互式新增发件邮箱"""
     print_header("新增发件邮箱", print_func)
     print_smtp_setup_guide(print_func)
-    email = input_func("邮箱地址: ").strip()
-    name = input_func("显示名称，直接回车则使用邮箱地址: ").strip()
-    password = read_password("应用专用密码/SMTP密码: ", input_func)
+    email = input_func("邮箱地址，输入0返回上一层: ").strip()
+    if is_back_command(email):
+        print_returned(print_func)
+        return
+    name = input_func("显示名称，直接回车则使用邮箱地址，输入0返回上一层: ").strip()
+    if is_back_command(name):
+        print_returned(print_func)
+        return
+    password = read_password("应用专用密码/SMTP密码，输入0返回上一层: ", input_func)
+    if is_back_command(password):
+        print_returned(print_func)
+        return
     if not password:
         print_func("保存失败: 密码不能为空。Gmail 请填写16位应用专用密码，不是网页登录密码。")
         return
-    smtp_host, smtp_port, smtp_use_ssl = read_smtp_fields(input_func, print_func)
+    smtp_fields = read_smtp_fields(input_func, print_func)
+    if smtp_fields is None:
+        return
+    smtp_host, smtp_port, smtp_use_ssl = smtp_fields
     try:
         sender = config_manager.build_sender(
             email=email,
@@ -195,10 +213,19 @@ def edit_sender_interactive(
     if not sender:
         return
     print_smtp_setup_guide(print_func)
-    print_func("直接回车表示保留原值。")
+    print_func("直接回车表示保留原值，输入0返回上一层。")
     name = input_func(f"显示名称 [{sender.get('name') or '-'}]: ").strip()
-    password = read_password("新密码，直接回车保留原密码: ", input_func)
-    smtp_host, smtp_port, smtp_use_ssl = read_smtp_fields(input_func, print_func, sender)
+    if is_back_command(name):
+        print_returned(print_func)
+        return
+    password = read_password("新密码，直接回车保留原密码，输入0返回上一层: ", input_func)
+    if is_back_command(password):
+        print_returned(print_func)
+        return
+    smtp_fields = read_smtp_fields(input_func, print_func, sender)
+    if smtp_fields is None:
+        return
+    smtp_host, smtp_port, smtp_use_ssl = smtp_fields
     updates: dict[str, Any] = {}
     if name:
         updates["name"] = name
@@ -224,7 +251,10 @@ def delete_sender_interactive(
     sender = pick_sender(config, input_func, print_func)
     if not sender:
         return
-    confirm = input_func(f"确认删除 {sender['email']}？输入 DELETE 确认: ").strip()
+    confirm = input_func(f"确认删除 {sender['email']}？输入 DELETE 确认，输入0返回上一层: ").strip()
+    if is_back_command(confirm):
+        print_returned(print_func)
+        return
     if confirm != "DELETE":
         print_func("已取消删除。")
         return
@@ -238,15 +268,40 @@ def test_sender_interactive(config: dict[str, Any], input_func: InputFunc, print
     sender = pick_sender(config, input_func, print_func)
     if not sender:
         return
+    test_one_sender(config, sender, print_func)
+
+
+def test_all_senders_interactive(config: dict[str, Any], print_func: PrintFunc) -> None:
+    """测试全部可用SMTP账号"""
+    senders = config_manager.active_senders(config)
+    if not senders:
+        print_func("暂无可测试发件邮箱。请先新增邮箱并填写密码。")
+        return
+    success_count = 0
+    fail_count = 0
+    print_header("测试全部SMTP登录", print_func)
+    for index, sender in enumerate(senders, 1):
+        print_func(f"[{index}/{len(senders)}] {sender['email']}")
+        if test_one_sender(config, sender, print_func):
+            success_count += 1
+        else:
+            fail_count += 1
+    print_func(f"测试完成：成功 {success_count} 个，失败 {fail_count} 个")
+
+
+def test_one_sender(config: dict[str, Any], sender: dict[str, Any], print_func: PrintFunc) -> bool:
+    """测试单个SMTP账号"""
     smtp = config_manager.resolve_sender_smtp(config, sender)
     smtp["proxy"] = config.get("smtp_proxy", {})
     print_func(f"正在测试 {sender['email']} -> {smtp['host']}:{smtp['port']} ...")
     try:
         mailer.test_smtp_login(smtp, sender)
         print_func("SMTP登录成功。")
+        return True
     except Exception as error:
         print_func(f"SMTP登录失败: {error}")
         print_func(smtp_failure_hint(error))
+        return False
 
 
 def pick_sender(
@@ -260,7 +315,10 @@ def pick_sender(
         print_func("暂无发件邮箱。")
         return None
     list_senders(config, print_func)
-    raw_index = input_func("请输入邮箱序号: ").strip()
+    raw_index = input_func("请输入邮箱序号，输入0返回上一层: ").strip()
+    if is_back_command(raw_index):
+        print_returned(print_func)
+        return None
     try:
         index = int(raw_index)
     except ValueError:
@@ -276,12 +334,15 @@ def read_smtp_fields(
     input_func: InputFunc,
     print_func: PrintFunc,
     sender: dict[str, Any] | None = None,
-) -> tuple[str, int, bool]:
+) -> tuple[str, int, bool] | None:
     """读取SMTP配置，默认使用Gmail SMTP"""
     current_smtp = sender.get("smtp", {}) if sender else {}
     print_func("SMTP配置: 直接回车使用默认 Gmail/Google Workspace: smtp.gmail.com:465 SSL")
     print_func("普通 Gmail、Google Workspace、自有域名走 Google 托管时，一般不用改这里。")
-    host = input_func(f"SMTP服务器 [{current_smtp.get('host') or '默认Gmail'}]: ").strip()
+    host = input_func(f"SMTP服务器 [{current_smtp.get('host') or '回车默认Gmail'}]，输入0返回上一层: ").strip()
+    if is_back_command(host):
+        print_returned(print_func)
+        return None
     if not host:
         return "", 465, True
     port_raw = input_func(f"SMTP端口 [{current_smtp.get('port') or 465}]: ").strip()
@@ -307,12 +368,21 @@ def manage_send_settings(config_path: Path, input_func: InputFunc, print_func: P
     config = config_manager.load_config(config_path)
     settings = config["settings"]
     print_header("调整发送设置", print_func)
-    print_func("直接回车表示保留原值。")
+    print_func("直接回车表示保留原值，输入0返回上一层。")
     emails_per_account = input_func(
         f"每个邮箱连续发送几封后切换 [{settings.get('emails_per_account', 1)}]: "
     ).strip()
+    if is_back_command(emails_per_account):
+        print_returned(print_func)
+        return
     delay_seconds = input_func(f"每封邮件间隔秒数 [{settings.get('delay_seconds', 12)}]: ").strip()
+    if is_back_command(delay_seconds):
+        print_returned(print_func)
+        return
     max_retries = input_func(f"失败重试次数 [{settings.get('max_retries', 3)}]: ").strip()
+    if is_back_command(max_retries):
+        print_returned(print_func)
+        return
     if emails_per_account:
         settings["emails_per_account"] = max(1, int(emails_per_account))
     if delay_seconds:
@@ -329,7 +399,10 @@ def manage_license(config_path: Path, input_func: InputFunc, print_func: PrintFu
     current = config.get("license", {}).get("code") or "未填写"
     print_header("设置授权码", print_func)
     print_func(f"当前授权码: {current}")
-    code = input_func("请输入新的授权码，直接回车则不修改: ").strip()
+    code = input_func("请输入新的授权码，直接回车则不修改，输入0返回上一层: ").strip()
+    if is_back_command(code):
+        print_returned(print_func)
+        return
     if code:
         config.setdefault("license", {})["code"] = code
         config_manager.save_config(config_path, config)
@@ -373,6 +446,16 @@ def print_smtp_setup_guide(print_func: PrintFunc) -> None:
     print_func("- Google账号需要先开启两步验证，才会出现应用专用密码入口")
     print_func("- SMTP服务器直接回车即可使用默认值 smtp.gmail.com:465 SSL")
     print_func("")
+
+
+def is_back_command(value: str) -> bool:
+    """判断用户是否选择返回上一层。"""
+    return value.strip() == BACK_COMMAND
+
+
+def print_returned(print_func: PrintFunc) -> None:
+    """统一提示已返回上一层。"""
+    print_func("已返回上一层。")
 
 
 def smtp_failure_hint(error: Exception) -> str:

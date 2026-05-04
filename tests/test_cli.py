@@ -52,6 +52,73 @@ def test_sender_menu_adds_gmail_default_sender(tmp_path):
     assert "smtp" not in config["senders"][0]
 
 
+def test_sender_menu_can_return_while_adding_sender(tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    inputs = make_input([
+        "2",
+        "0",
+        "0",
+    ])
+    output = []
+
+    cli.manage_senders(config_path, inputs, output.append)
+
+    assert config_manager.load_config(config_path)["senders"] == []
+    assert any("已返回上一层" in line for line in output)
+
+
+def test_sender_picker_can_return_to_previous_menu():
+    config = config_manager.normalize_config({
+        "senders": [{"email": "a@gmail.com", "password": "app-password"}]
+    })
+    output = []
+
+    sender = cli.pick_sender(config, make_input(["0"]), output.append)
+
+    assert sender is None
+    assert any("已返回上一层" in line for line in output)
+
+
+def test_read_smtp_fields_mentions_enter_default_gmail():
+    prompts = []
+
+    cli.read_smtp_fields(lambda prompt="": prompts.append(prompt) or "", lambda line: None)
+
+    assert any("回车默认Gmail" in prompt for prompt in prompts)
+
+
+def test_sender_menu_tests_all_smtp_accounts(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    config = config_manager.load_config(config_path)
+    config["senders"] = [
+        {"email": "a@gmail.com", "password": "a-password", "name": "A"},
+        {"email": "b@gmail.com", "password": "b-password", "name": "B"},
+    ]
+    config_manager.save_config(config_path, config)
+    tested = []
+
+    def fake_test_smtp_login(smtp_config, sender):
+        tested.append((sender["email"], smtp_config["host"]))
+        if sender["email"] == "b@gmail.com":
+            raise RuntimeError("Username and Password not accepted")
+        return True
+
+    monkeypatch.setattr("ironmail.cli.mailer.test_smtp_login", fake_test_smtp_login)
+    output = []
+    inputs = make_input(["6", "0"])
+
+    cli.manage_senders(config_path, inputs, output.append)
+
+    assert tested == [
+        ("a@gmail.com", "smtp.gmail.com"),
+        ("b@gmail.com", "smtp.gmail.com"),
+    ]
+    assert any("测试完成：成功 1 个，失败 1 个" in line for line in output)
+    assert any("应用专用密码" in line for line in output)
+
+
 def test_settings_menu_updates_rotation_without_yaml_editing(tmp_path):
     config_path = tmp_path / "config" / "config.yaml"
     write_config(config_path)
