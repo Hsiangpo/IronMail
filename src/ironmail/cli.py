@@ -52,9 +52,7 @@ def run_console(
         elif choice == "5":
             manage_templates(config_path, input_func, print_func)
         elif choice == "6":
-            clear_screen(input_func, print_func)
-            show_config_summary(config, print_func)
-            pause_after_action(input_func, print_func)
+            manage_config(config_path, input_func, print_func)
         elif choice == "0":
             print_func("已退出。")
             return
@@ -94,7 +92,7 @@ def show_main_menu(
             "3. 调整发送设置",
             "4. 设置授权码",
             "5. 管理邮件模板",
-            "6. 查看当前配置",
+            "6. 配置",
             "0. 退出",
         ]
     )
@@ -382,7 +380,7 @@ def template_dir_from_config(config_path: Path) -> Path:
 
 
 def list_templates(template_dir: Path, print_func: PrintFunc) -> list[Path]:
-    """展示邮件模板列表。"""
+    """展示邮件模板列表和完整内容。"""
     try:
         files = templates.list_template_files(template_dir)
     except FileNotFoundError:
@@ -395,6 +393,9 @@ def list_templates(template_dir: Path, print_func: PrintFunc) -> list[Path]:
     print_func("-" * 72)
     for index, file_path in enumerate(files, 1):
         print_func(f"{index:<4}  {file_path.name}")
+        print_func("-" * 72)
+        print_func(file_path.read_text(encoding="utf-8-sig").rstrip())
+        print_func("-" * 72)
     return files
 
 
@@ -547,6 +548,127 @@ def read_password(prompt: str, input_func: InputFunc) -> str:
     if input_func is input:
         return getpass.getpass(prompt)
     return input_func(prompt)
+
+
+def manage_config(config_path: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
+    """运行配置管理菜单。"""
+    while True:
+        config = config_manager.load_config(config_path)
+        clear_screen(input_func, print_func)
+        print_header("配置", print_func)
+        print_menu(
+            [
+                ("1", "查看当前配置"),
+                ("2", "修改发送设置"),
+                ("3", "修改默认SMTP"),
+                ("4", "修改SMTP出网"),
+                ("5", "设置/新增授权码"),
+                ("6", "删除授权码"),
+                ("0", "返回主菜单"),
+            ],
+            print_func,
+        )
+        choice = input_func("请选择功能: ").strip()
+        if choice == "1":
+            show_config_summary(config, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "2":
+            manage_send_settings(config_path, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "3":
+            manage_default_smtp(config_path, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "4":
+            manage_smtp_proxy(config_path, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "5":
+            manage_license(config_path, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "6":
+            clear_license_interactive(config_path, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "0":
+            return
+        else:
+            print_func("请输入菜单里的数字。")
+
+
+def manage_default_smtp(config_path: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
+    """修改全局默认SMTP配置。"""
+    config = config_manager.load_config(config_path)
+    smtp = config.get("smtp", {})
+    print_header("修改默认SMTP", print_func)
+    print_func("直接回车表示保留原值，输入0返回上一层。")
+    host = input_func(f"SMTP服务器 [{smtp.get('host') or 'smtp.gmail.com'}]: ").strip()
+    if is_back_command(host):
+        print_returned(print_func)
+        return
+    port_raw = input_func(f"SMTP端口 [{smtp.get('port') or 465}]: ").strip()
+    if is_back_command(port_raw):
+        print_returned(print_func)
+        return
+    ssl_raw = input_func(f"是否使用SSL？Y/N [{'Y' if smtp.get('use_ssl', True) else 'N'}]: ").strip().upper()
+    if is_back_command(ssl_raw):
+        print_returned(print_func)
+        return
+    updated = dict(smtp)
+    if host:
+        updated["host"] = host
+    if port_raw:
+        updated["port"] = int(port_raw)
+    if ssl_raw:
+        updated["use_ssl"] = ssl_raw != "N"
+    config["smtp"] = config_manager.normalize_smtp(updated)
+    config_manager.save_config(config_path, config)
+    print_func("默认SMTP已保存。")
+
+
+def manage_smtp_proxy(config_path: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
+    """修改SMTP出网配置。"""
+    config = config_manager.load_config(config_path)
+    proxy = config.get("smtp_proxy", {})
+    print_header("修改SMTP出网", print_func)
+    print_func("模式说明: auto=先直连失败再试代理，direct=只直连，proxy=只走代理。")
+    mode = input_func(f"出网模式 auto/direct/proxy [{proxy.get('mode') or 'auto'}]: ").strip().lower()
+    if is_back_command(mode):
+        print_returned(print_func)
+        return
+    host = input_func(f"代理地址 [{proxy.get('host') or '127.0.0.1'}]: ").strip()
+    if is_back_command(host):
+        print_returned(print_func)
+        return
+    port_raw = input_func(f"主代理端口 [{proxy.get('port') or 7897}]: ").strip()
+    if is_back_command(port_raw):
+        print_returned(print_func)
+        return
+    updated = dict(proxy)
+    if mode:
+        updated["mode"] = mode
+    if host:
+        updated["host"] = host
+    if port_raw:
+        updated["port"] = int(port_raw)
+    config["smtp_proxy"] = config_manager.normalize_smtp_proxy(updated)
+    config_manager.save_config(config_path, config)
+    print_func("SMTP出网配置已保存。")
+
+
+def clear_license_interactive(config_path: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
+    """清空本地授权码。"""
+    config = config_manager.load_config(config_path)
+    current = config.get("license", {}).get("code") or "未填写"
+    print_header("删除授权码", print_func)
+    print_func(f"当前授权码: {current}")
+    confirm = input_func("确认清空授权码？输入 DELETE 确认，输入0返回上一层: ").strip()
+    if is_back_command(confirm):
+        print_returned(print_func)
+        return
+    if confirm != "DELETE":
+        print_func("已取消删除。")
+        return
+    config.setdefault("license", {})["code"] = ""
+    config_manager.save_config(config_path, config)
+    print_func("授权码已清空。")
 
 
 def manage_send_settings(config_path: Path, input_func: InputFunc, print_func: PrintFunc) -> None:

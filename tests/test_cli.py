@@ -254,6 +254,8 @@ def test_main_menu_shows_runtime_verified_license():
     assert "│ IronMail 控制台" in joined
     assert "授权状态  本次已验证" in joined
     assert "1. 开始发送邮件" in joined
+    assert "6. 配置" in joined
+    assert "查看当前配置" not in joined
 
 
 def test_console_clears_before_starting_send(monkeypatch, tmp_path):
@@ -381,3 +383,52 @@ def test_template_menu_deletes_template_after_confirmation(tmp_path):
     cli.manage_templates(config_path, inputs, lambda line: None)
 
     assert not template_path.exists()
+
+
+def test_template_list_shows_full_template_content(tmp_path):
+    template_dir = tmp_path / "Mails" / "邮件模板"
+    template_dir.mkdir(parents=True)
+    template_path = template_dir / "德国公司示例模板.md"
+    template_path.write_text(
+        "邮件主题：\n"
+        "Bitte um Einrichtung einer WhatsApp-Gruppe für {{网页}}\n\n"
+        "邮件正文：\n"
+        "Sehr geehrte/r {{法人}},\n",
+        encoding="utf-8",
+    )
+    output = []
+
+    cli.list_templates(template_dir, output.append)
+
+    joined = "\n".join(output)
+    assert "德国公司示例模板.md" in joined
+    assert "Bitte um Einrichtung einer WhatsApp-Gruppe" in joined
+    assert "Sehr geehrte/r {{法人}}" in joined
+
+
+def test_config_menu_updates_default_smtp(tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    inputs = make_input(["3", "mail.gmx.com", "465", "", "0"])
+    output = []
+
+    cli.manage_config(config_path, inputs, output.append)
+
+    config = config_manager.load_config(config_path)
+    assert config["smtp"] == {"host": "mail.gmx.com", "port": 465, "use_ssl": True}
+    assert any("默认SMTP已保存" in line for line in output)
+
+
+def test_config_menu_can_clear_license(tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    config = config_manager.load_config(config_path)
+    config["license"]["code"] = "IM-AAAAAA-BBBBBB-CCCCCC-DDDDDD"
+    config_manager.save_config(config_path, config)
+    inputs = make_input(["6", "DELETE", "0"])
+    output = []
+
+    cli.manage_config(config_path, inputs, output.append)
+
+    assert config_manager.load_config(config_path)["license"]["code"] == ""
+    assert any("授权码已清空" in line for line in output)
