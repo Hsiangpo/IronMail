@@ -124,6 +124,7 @@ class IronMailApp(Tk):
         self.selected_data_file: Path | None = None
         self.selected_template_file: Path | None = None
         self.current_send_lines: list[str] = []
+        self.current_send_log_path: Path | None = None
 
         self.title(APP_TITLE)
         self.geometry("1120x760")
@@ -227,10 +228,16 @@ class IronMailApp(Tk):
     def _drain_queue(self) -> None:
         try:
             while True:
-                self.queue.get_nowait()()
+                callback = self.queue.get_nowait()
+                try:
+                    callback()
+                except Exception as error:
+                    traceback_text = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+                    write_crash_log(traceback_text)
         except queue.Empty:
             pass
-        self.after(100, self._drain_queue)
+        finally:
+            self.after(100, self._drain_queue)
 
     def run_background(self, target: Callable[[], None]) -> None:
         if self.worker and self.worker.is_alive():
@@ -243,7 +250,8 @@ class IronMailApp(Tk):
             except Exception as error:
                 traceback_text = "".join(traceback.format_exception(type(error), error, error.__traceback__))
                 log_path = write_crash_log(traceback_text)
-                self._post(lambda: messagebox.showerror("任务失败", f"{error}\n\n错误日志: {log_path or '写入失败'}"))
+                message = f"{error}\n\n错误日志: {log_path or '写入失败'}"
+                self._post(lambda message=message: messagebox.showerror("任务失败", message))
 
         self.worker = threading.Thread(target=guarded, daemon=True)
         self.worker.start()
@@ -299,7 +307,8 @@ class IronMailApp(Tk):
                 self._post(self.show_main_view)
             else:
                 message = output.getvalue().strip() or "授权验证未通过，请检查授权码或网络。"
-                self._post(lambda: self.auth_status_var.set(message.splitlines()[-1]))
+                status = message.splitlines()[-1]
+                self._post(lambda status=status: self.auth_status_var.set(status))
 
         self.run_background(task)
 
@@ -537,73 +546,79 @@ class IronMailApp(Tk):
         skipped_count = 0
         send_attempt_count = 0
         log_file = self.app_dir / settings.get("log_file", "logs/send_log.txt")
-        self.gui_log(f"开始发送: {data_path.name} | 模板: {template_path.name if template_path else '表格内容'}")
-        self.gui_log(f"共 {len(df)} 封邮件，发件邮箱 {len(senders)} 个。")
         log_file.parent.mkdir(parents=True, exist_ok=True)
+        self.current_send_log_path = log_file
+        try:
+            self.gui_log(f"开始发送: {data_path.name} | 模板: {template_path.name if template_path else '表格内容'}")
+            self.gui_log(f"共 {len(df)} 封邮件，发件邮箱 {len(senders)} 个。")
 
-        for index, row in df.iterrows():
-            recipient_email = str(row["邮箱"]).strip()
-            row_key = send_progress.row_key(index, recipient_email)
-            self._post(lambda value=index: self.progress.configure(value=value))
-            if send_progress.is_row_completed(progress_state, row_key):
-                skipped_count += 1
-                self.gui_log(f"[{index + 1}/{len(df)}] 跳过断点记录 -> {recipient_email}")
-                continue
-            if not recipient_email or recipient_email == "nan":
-                skipped_count += 1
-                send_progress.mark_row_completed(progress_state, row_key, "skipped_empty_email")
-                self.gui_log(f"[{index + 1}/{len(df)}] 跳过空邮箱")
-                continue
-            subject = str(row["邮件主题"]).strip()
-            body = str(row["邮件正文"]).strip()
-            sent = False
-            max_retries = int(settings.get("max_retries", 3))
-            candidates = mailer.sender_candidates(senders, send_attempt_count, emails_per_account)
-            for sender_offset, current_sender in enumerate(candidates):
-                smtp_config = config_manager.resolve_sender_smtp(config, current_sender)
-                smtp_config["proxy"] = config.get("smtp_proxy", {})
-                if sender_offset:
-                    self.gui_log(f"[{index + 1}/{len(df)}] 切换发件邮箱重试 -> {current_sender['email']}")
-                for attempt in range(max_retries):
-                    try:
-                        mailer.send_email(smtp_config, current_sender, recipient_email, subject, body)
-                        success_count += 1
-                        send_attempt_count += 1
-                        sent = True
-                        send_progress.mark_row_completed(progress_state, row_key, "success")
-                        self.gui_log(f"[{index + 1}/{len(df)}] 成功 -> {recipient_email} (发件人: {current_sender['email']})")
-                        break
-                    except Exception as error:
-                        error_text = format_send_error(error)
-                        if attempt < max_retries - 1:
-                            self.gui_log(f"[{index + 1}/{len(df)}] 重试 {attempt + 1} -> {recipient_email}: {error_text}")
-                        elif sender_offset < len(candidates) - 1:
+            for index, row in df.iterrows():
+                recipient_email = str(row["邮箱"]).strip()
+                row_key = send_progress.row_key(index, recipient_email)
+                self._post(lambda value=index: self.progress.configure(value=value))
+                if send_progress.is_row_completed(progress_state, row_key):
+                    skipped_count += 1
+                    self.gui_log(f"[{index + 1}/{len(df)}] 跳过断点记录 -> {recipient_email}")
+                    continue
+                if not recipient_email or recipient_email == "nan":
+                    skipped_count += 1
+                    send_progress.mark_row_completed(progress_state, row_key, "skipped_empty_email")
+                    self.gui_log(f"[{index + 1}/{len(df)}] 跳过空邮箱")
+                    continue
+                subject = str(row["邮件主题"]).strip()
+                body = str(row["邮件正文"]).strip()
+                sent = False
+                max_retries = int(settings.get("max_retries", 3))
+                candidates = mailer.sender_candidates(senders, send_attempt_count, emails_per_account)
+                for sender_offset, current_sender in enumerate(candidates):
+                    smtp_config = config_manager.resolve_sender_smtp(config, current_sender)
+                    smtp_config["proxy"] = config.get("smtp_proxy", {})
+                    if sender_offset:
+                        self.gui_log(f"[{index + 1}/{len(df)}] 切换发件邮箱重试 -> {current_sender['email']}")
+                    for attempt in range(max_retries):
+                        try:
+                            mailer.send_email(smtp_config, current_sender, recipient_email, subject, body)
+                            success_count += 1
+                            send_attempt_count += 1
+                            sent = True
+                            send_progress.mark_row_completed(progress_state, row_key, "success")
                             self.gui_log(
-                                f"[{index + 1}/{len(df)}] 发件邮箱 {current_sender['email']} 不可用，准备切换: {error_text}"
+                                f"[{index + 1}/{len(df)}] 成功 -> {recipient_email} (发件人: {current_sender['email']})"
                             )
-                        else:
-                            fail_count += 1
-                            self.gui_log(f"[{index + 1}/{len(df)}] 失败 -> {recipient_email}: {error_text}")
-                if sent:
-                    break
-            if not sent:
-                continue
-            delay = int(settings.get("delay_seconds", 12))
-            if index < len(df) - 1 and delay > 0:
-                threading.Event().wait(delay)
+                            break
+                        except Exception as error:
+                            error_text = format_send_error(error)
+                            if attempt < max_retries - 1:
+                                self.gui_log(f"[{index + 1}/{len(df)}] 重试 {attempt + 1} -> {recipient_email}: {error_text}")
+                            elif sender_offset < len(candidates) - 1:
+                                self.gui_log(
+                                    f"[{index + 1}/{len(df)}] 发件邮箱 {current_sender['email']} 不可用，准备切换: {error_text}"
+                                )
+                            else:
+                                fail_count += 1
+                                self.gui_log(f"[{index + 1}/{len(df)}] 失败 -> {recipient_email}: {error_text}")
+                    if sent:
+                        break
+                if not sent:
+                    continue
+                delay = int(settings.get("delay_seconds", 12))
+                if index < len(df) - 1 and delay > 0:
+                    threading.Event().wait(delay)
 
-        self._post(lambda: self.progress.configure(value=len(df)))
-        self.gui_log(f"发送完成。成功 {success_count}，失败 {fail_count}，跳过 {skipped_count}。")
-        with log_file.open("a", encoding="utf-8") as file:
-            file.write("".join(self.current_send_lines))
-            if self.current_send_lines and not self.current_send_lines[-1].endswith("\n"):
-                file.write("\n")
-        self._post(lambda: self.send_status_var.set(f"完成：成功 {success_count}，失败 {fail_count}，跳过 {skipped_count}"))
+            self._post(lambda: self.progress.configure(value=len(df)))
+            self.gui_log(f"发送完成。成功 {success_count}，失败 {fail_count}，跳过 {skipped_count}。")
+            summary = f"完成：成功 {success_count}，失败 {fail_count}，跳过 {skipped_count}"
+            self._post(lambda summary=summary: self.send_status_var.set(summary))
+        finally:
+            self.current_send_log_path = None
 
     def gui_log(self, message: str) -> None:
         line = f"[{datetime.now().strftime('%H:%M:%S')}] {message}\n"
         self.current_send_lines.append(line)
-        self._post(lambda: (self.send_log.insert(END, line), self.send_log.see(END)))
+        if self.current_send_log_path:
+            with self.current_send_log_path.open("a", encoding="utf-8") as file:
+                file.write(line)
+        self._post(lambda line=line: (self.send_log.insert(END, line), self.send_log.see(END)))
 
     # Senders tab
     def _build_senders_tab(self) -> None:
@@ -671,6 +686,8 @@ class IronMailApp(Tk):
         if not sender:
             messagebox.showinfo("请选择邮箱", "请先选择一个发件邮箱。")
             return
+        if hasattr(self, "main_summary_var"):
+            self.main_summary_var.set(f"正在测试 {sender['email']} ...")
         self.run_background(lambda: self._test_sender(sender))
 
     def test_all_senders(self) -> None:
@@ -684,12 +701,21 @@ class IronMailApp(Tk):
         config = self.load_config()
         smtp = config_manager.resolve_sender_smtp(config, sender)
         smtp["proxy"] = config.get("smtp_proxy", {})
+        email = sender["email"]
         try:
             mailer.test_smtp_login(smtp, sender)
-            self._post(lambda: messagebox.showinfo("SMTP 测试成功", f"{sender['email']} 登录成功。"))
+            self._post(lambda email=email: messagebox.showinfo("SMTP 测试成功", f"{email} 登录成功。"))
+            self._post(lambda email=email: self.main_summary_var.set(f"{email} SMTP 测试成功。"))
         except Exception as error:
             hint = friendly_smtp_hint(error)
-            self._post(lambda: messagebox.showerror("SMTP 测试失败", f"{sender['email']}\n\n{error}\n\n{hint}"))
+            error_text = str(error)
+            self._post(
+                lambda email=email, error_text=error_text, hint=hint: messagebox.showerror(
+                    "SMTP 测试失败",
+                    f"{email}\n\n{error_text}\n\n{hint}",
+                )
+            )
+            self._post(lambda email=email: self.main_summary_var.set(f"{email} SMTP 测试失败。"))
 
     # Recipients tab
     def _build_recipients_tab(self) -> None:
