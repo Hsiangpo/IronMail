@@ -102,6 +102,19 @@ def test_resolve_sender_smtp_uses_sender_override_then_default(tmp_path):
     }
 
 
+def test_smtp_defaults_for_known_email_domains():
+    assert config_manager.smtp_defaults_for_email("sales@gmail.com") == {
+        "host": "smtp.gmail.com",
+        "port": 465,
+        "use_ssl": True,
+    }
+    assert config_manager.smtp_defaults_for_email("sales@gmx.com") == {
+        "host": "mail.gmx.com",
+        "port": 465,
+        "use_ssl": True,
+    }
+
+
 def test_normalize_config_keeps_smtp_proxy_settings(tmp_path):
     config_path = tmp_path / "config.yaml"
     write_config(config_path)

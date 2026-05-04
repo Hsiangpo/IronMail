@@ -14,6 +14,13 @@ DEFAULT_SMTP = {
     "use_ssl": True,
 }
 
+PROVIDER_SMTP_DEFAULTS = {
+    "gmail.com": DEFAULT_SMTP,
+    "googlemail.com": DEFAULT_SMTP,
+    "gmx.com": {"host": "mail.gmx.com", "port": 465, "use_ssl": True},
+    "gmx.us": {"host": "mail.gmx.com", "port": 465, "use_ssl": True},
+}
+
 DEFAULT_SMTP_PROXY = {
     "mode": "auto",
     "type": "http",
@@ -71,6 +78,12 @@ def normalize_smtp(smtp: dict[str, Any] | None) -> dict[str, Any]:
     merged["port"] = int(merged.get("port") or DEFAULT_SMTP["port"])
     merged["use_ssl"] = bool(merged.get("use_ssl"))
     return merged
+
+
+def smtp_defaults_for_email(email: str) -> dict[str, Any]:
+    """按邮箱域名返回常见SMTP默认值。"""
+    domain = email.rsplit("@", 1)[-1].strip().lower() if "@" in email else ""
+    return normalize_smtp(PROVIDER_SMTP_DEFAULTS.get(domain, DEFAULT_SMTP))
 
 
 def normalize_smtp_proxy(proxy: dict[str, Any] | None) -> dict[str, Any]:

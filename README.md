@@ -48,15 +48,16 @@ copy config\config.example.yaml config\config.yaml
 - `设置授权码`: 保存客户端授权码
 - `查看当前配置`: 查看关键配置和已配置发件邮箱
 
-发件邮箱默认使用 Gmail SMTP：
+发件邮箱支持 Gmail、GMX、Google Workspace 和其他标准 SMTP 邮箱。终端新增发件邮箱时，常见邮箱会按域名自动带出 SMTP：
 
 ```text
-smtp.gmail.com:465 SSL
+Gmail: smtp.gmail.com:465 SSL
+GMX:   mail.gmx.com:465 SSL
 ```
 
-当前推荐使用普通 Gmail 多账号轮询。新增 Gmail 邮箱时 SMTP 服务器直接回车即可使用默认配置；每个 Gmail 账号都需要先在 Google 账号安全设置里生成应用专用密码。
+新增 Gmail 或 GMX 邮箱时，SMTP 服务器直接回车即可使用自动识别的配置。Gmail 账号需要先在 Google 账号安全设置里生成应用专用密码；GMX 请填写可用于 SMTP 的密码或应用密码。
 
-新增多个 Gmail 后，程序会按 `每个邮箱连续发送几封后切换` 的设置自动轮询。默认值是 `1`，也就是每发 1 封切换下一个 Gmail。
+新增多个发件邮箱后，程序会按 `每个邮箱连续发送几封后切换` 的设置自动轮询。默认值是 `1`，也就是每发 1 封切换下一个邮箱。
 
 ## 断点续发
 

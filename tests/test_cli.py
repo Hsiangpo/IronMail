@@ -61,6 +61,34 @@ def test_sender_menu_adds_gmail_default_sender_after_smtp_test(tmp_path, monkeyp
     assert any("SMTP登录测试通过" in line for line in output)
 
 
+def test_sender_menu_adds_gmx_sender_with_provider_smtp(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    inputs = make_input([
+        "2",
+        "sender@gmx.com",
+        "GMX销售",
+        "smtp-password",
+        "",
+        "0",
+    ])
+    output = []
+    tested = []
+
+    def fake_test_smtp_login(smtp_config, sender):
+        tested.append((smtp_config["host"], smtp_config["port"], sender["email"]))
+        return True
+
+    monkeypatch.setattr("ironmail.cli.mailer.test_smtp_login", fake_test_smtp_login)
+
+    cli.manage_senders(config_path, inputs, output.append)
+
+    sender = config_manager.load_config(config_path)["senders"][0]
+    assert sender["email"] == "sender@gmx.com"
+    assert sender["smtp"] == {"host": "mail.gmx.com", "port": 465, "use_ssl": True}
+    assert tested == [("mail.gmx.com", 465, "sender@gmx.com")]
+
+
 def test_sender_menu_does_not_save_when_smtp_test_fails(tmp_path, monkeypatch):
     config_path = tmp_path / "config" / "config.yaml"
     write_config(config_path)
@@ -114,12 +142,14 @@ def test_sender_picker_can_return_to_previous_menu():
     assert any("已返回上一层" in line for line in output)
 
 
-def test_read_smtp_fields_mentions_enter_default_gmail():
+def test_read_smtp_fields_mentions_auto_provider_default():
     prompts = []
+    output = []
 
-    cli.read_smtp_fields(lambda prompt="": prompts.append(prompt) or "", lambda line: None)
+    cli.read_smtp_fields(lambda prompt="": prompts.append(prompt) or "", output.append, email="sender@gmx.com")
 
-    assert any("回车默认Gmail" in prompt for prompt in prompts)
+    assert any("回车自动识别" in prompt for prompt in prompts)
+    assert any("mail.gmx.com:465" in line for line in output)
 
 
 def test_sender_menu_tests_all_smtp_accounts(tmp_path, monkeypatch):
@@ -233,6 +263,7 @@ def test_smtp_setup_guide_mentions_gmail_app_password():
     joined = "\n".join(output)
     assert "https://myaccount.google.com/apppasswords" in joined
     assert "16位应用专用密码" in joined
+    assert "GMX" in joined
 
 
 def test_smtp_failure_hint_explains_app_password_and_network():

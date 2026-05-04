@@ -80,7 +80,7 @@ def show_main_menu(
         "",
     ]
     if sender_count == 0:
-        panel_lines.append("下一步  进入 2 管理发件邮箱，添加 Gmail 或 oldiron.us 邮箱。")
+        panel_lines.append("下一步  进入 2 管理发件邮箱，添加 Gmail、GMX 或其他SMTP邮箱。")
         panel_lines.append("")
     panel_lines.extend(
         [
@@ -101,8 +101,8 @@ def manage_senders(config_path: Path, input_func: InputFunc, print_func: PrintFu
         config = config_manager.load_config(config_path)
         clear_screen(input_func, print_func)
         print_header("发件邮箱管理", print_func)
-        print_func("说明: 普通 Gmail 和 Google Workspace 邮箱可直接使用默认 SMTP。")
-        print_func("提示: 新增 Gmail 前需要先准备 Google 账号的16位应用专用密码。")
+        print_func("说明: 支持 Gmail、GMX、Google Workspace 和其他标准 SMTP 邮箱。")
+        print_func("提示: Gmail 需要应用专用密码；GMX 请使用邮箱的SMTP密码或应用密码。")
         print_menu(
             [
                 ("1", "查看发件邮箱"),
@@ -189,7 +189,7 @@ def add_sender_interactive(
     if not password:
         print_func("保存失败: 密码不能为空。Gmail 请填写16位应用专用密码，不是网页登录密码。")
         return
-    smtp_fields = read_smtp_fields(input_func, print_func)
+    smtp_fields = read_smtp_fields(input_func, print_func, email=email)
     if smtp_fields is None:
         return
     smtp_host, smtp_port, smtp_use_ssl = smtp_fields
@@ -231,7 +231,7 @@ def edit_sender_interactive(
     if is_back_command(password):
         print_returned(print_func)
         return
-    smtp_fields = read_smtp_fields(input_func, print_func, sender)
+    smtp_fields = read_smtp_fields(input_func, print_func, sender, sender.get("email", ""))
     if smtp_fields is None:
         return
     smtp_host, smtp_port, smtp_use_ssl = smtp_fields
@@ -357,25 +357,33 @@ def read_smtp_fields(
     input_func: InputFunc,
     print_func: PrintFunc,
     sender: dict[str, Any] | None = None,
+    email: str = "",
 ) -> tuple[str, int, bool] | None:
-    """读取SMTP配置，默认使用Gmail SMTP"""
+    """读取SMTP配置，按邮箱域名给出常用默认值。"""
     current_smtp = sender.get("smtp", {}) if sender else {}
-    print_func("SMTP配置: 直接回车使用默认 Gmail/Google Workspace: smtp.gmail.com:465 SSL")
-    print_func("普通 Gmail、Google Workspace、自有域名走 Google 托管时，一般不用改这里。")
-    host = input_func(f"SMTP服务器 [{current_smtp.get('host') or '回车默认Gmail'}]，输入0返回上一层: ").strip()
+    provider_smtp = config_manager.smtp_defaults_for_email(email or str(sender.get("email", "") if sender else ""))
+    default_host = current_smtp.get("host") or provider_smtp["host"]
+    default_port = int(current_smtp.get("port") or provider_smtp["port"])
+    default_ssl = bool(current_smtp.get("use_ssl", provider_smtp["use_ssl"]))
+    print_func(f"SMTP配置: 直接回车自动识别为 {default_host}:{default_port} SSL={'开启' if default_ssl else '关闭'}")
+    print_func("Gmail、GMX 等常见邮箱会自动带出SMTP；其他邮箱请按服务商后台手动填写。")
+    host = input_func(f"SMTP服务器 [{current_smtp.get('host') or '回车自动识别'}]，输入0返回上一层: ").strip()
     if is_back_command(host):
         print_returned(print_func)
         return None
     if not host:
-        return "", 465, True
-    port_raw = input_func(f"SMTP端口 [{current_smtp.get('port') or 465}]: ").strip()
+        if provider_smtp == config_manager.DEFAULT_SMTP:
+            return "", default_port, default_ssl
+        return default_host, default_port, default_ssl
+    port_raw = input_func(f"SMTP端口 [{default_port}]: ").strip()
     try:
-        port = int(port_raw or current_smtp.get("port") or 465)
+        port = int(port_raw or default_port)
     except ValueError:
         print_func("SMTP端口必须是数字，本次使用默认端口 465。")
         port = 465
-    ssl_raw = input_func("是否使用SSL？Y/N [Y]: ").strip().upper()
-    use_ssl = ssl_raw != "N"
+    default_ssl_label = "Y" if default_ssl else "N"
+    ssl_raw = input_func(f"是否使用SSL？Y/N [{default_ssl_label}]: ").strip().upper()
+    use_ssl = default_ssl if not ssl_raw else ssl_raw != "N"
     return host, port, use_ssl
 
 
@@ -489,11 +497,11 @@ def display_width(text: str) -> int:
 def print_smtp_setup_guide(print_func: PrintFunc) -> None:
     """打印发件邮箱配置指引。"""
     print_func("填写说明:")
-    print_func("- 邮箱地址: 例如 yourname@gmail.com")
-    print_func("- 密码: Gmail 请填写16位应用专用密码，不是网页登录密码")
+    print_func("- 邮箱地址: 例如 yourname@gmail.com 或 yourname@gmx.com")
+    print_func("- 密码: Gmail 请填写16位应用专用密码；GMX 请填写SMTP密码或应用密码")
     print_func("- 获取应用专用密码: https://myaccount.google.com/apppasswords")
     print_func("- Google账号需要先开启两步验证，才会出现应用专用密码入口")
-    print_func("- SMTP服务器直接回车即可使用默认值 smtp.gmail.com:465 SSL")
+    print_func("- SMTP服务器直接回车会自动识别: Gmail 用 smtp.gmail.com，GMX 用 mail.gmx.com")
     print_func("")
 
 
@@ -512,19 +520,20 @@ def smtp_failure_hint(error: Exception) -> str:
     text = str(error).lower()
     if "username and password" in text or "authentication" in text or "535" in text:
         return (
-            "排查建议: Gmail 登录失败通常是密码填错、没有开启两步验证，"
-            "或填了网页登录密码。请使用 Google 生成的16位应用专用密码。"
+            "排查建议: 登录失败通常是密码填错、没有开启SMTP/应用密码，"
+            "或填了网页登录密码。Gmail 请先开启两步验证并使用16位应用专用密码，"
+            "GMX 请确认SMTP密码可用。"
         )
     if "timed out" in text or "timeout" in text or "network" in text:
         return (
             "排查建议: 当前网络到SMTP服务器不稳定。程序会自动尝试本机代理端口，"
-            "仍失败时请确认网络能访问 smtp.gmail.com:465。"
+            "仍失败时请确认网络能访问对应SMTP服务器，例如 smtp.gmail.com 或 mail.gmx.com。"
         )
     if "certificate" in text or "ssl" in text:
         return "排查建议: SSL连接失败，请确认SMTP端口为465且SSL开启。"
     return (
-        "排查建议: 请先确认邮箱地址、应用专用密码、SMTP服务器和端口是否正确；"
-        "Gmail默认是 smtp.gmail.com:465 SSL。"
+        "排查建议: 请先确认邮箱地址、SMTP密码、SMTP服务器和端口是否正确；"
+        "Gmail默认是 smtp.gmail.com:465 SSL，GMX默认是 mail.gmx.com:465 SSL。"
     )
 
 
