@@ -21,6 +21,31 @@ def test_parse_template_supports_subject_and_body_markers(tmp_path):
     assert "我看到贵司网站是 {{网页}}" in template.body
 
 
+def test_parse_template_supports_block_subject_layout(tmp_path):
+    path = tmp_path / "德国邀请.md"
+    path.write_text(
+        "邮件主题：\n"
+        "Bitte um Einrichtung einer WhatsApp-Gruppe für {{网页}}\n\n"
+        "邮件正文：\n"
+        "Sehr geehrte/r {{法人}},\n"
+        "Die aktuell erfasste Kontaktadresse lautet {{邮箱}}.\n",
+        encoding="utf-8",
+    )
+
+    template = templates.parse_template_file(path)
+
+    assert template.subject == "Bitte um Einrichtung einer WhatsApp-Gruppe für {{网页}}"
+    assert "Sehr geehrte/r {{法人}}" in template.body
+    assert "{{邮箱}}" in template.body
+
+
+def test_create_template_file_writes_editable_scaffold(tmp_path):
+    created = templates.create_template_file(tmp_path, "德国邀请")
+
+    assert created.name == "德国邀请.md"
+    assert created.read_text(encoding="utf-8") == "邮件主题：\n\n邮件正文：\n"
+
+
 def test_render_template_replaces_row_variables():
     template = templates.EmailTemplate(
         subject="关于 {{公司名}} 的合作沟通",

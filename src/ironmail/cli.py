@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import builtins
 import getpass
+import os
+import subprocess
 import sys
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
-from ironmail import config_manager, mailer
+from ironmail import config_manager, mailer, templates
 
 
 InputFunc = Callable[[str], str]
@@ -47,6 +50,8 @@ def run_console(
             manage_license(config_path, input_func, print_func)
             pause_after_action(input_func, print_func)
         elif choice == "5":
+            manage_templates(config_path, input_func, print_func)
+        elif choice == "6":
             clear_screen(input_func, print_func)
             show_config_summary(config, print_func)
             pause_after_action(input_func, print_func)
@@ -88,7 +93,8 @@ def show_main_menu(
             "2. 管理发件邮箱",
             "3. 调整发送设置",
             "4. 设置授权码",
-            "5. 查看当前配置",
+            "5. 管理邮件模板",
+            "6. 查看当前配置",
             "0. 退出",
         ]
     )
@@ -288,14 +294,35 @@ def test_all_senders_interactive(config: dict[str, Any], print_func: PrintFunc) 
         return
     success_count = 0
     fail_count = 0
+    workers = min(64, len(senders))
     print_header("测试全部SMTP登录", print_func)
-    for index, sender in enumerate(senders, 1):
-        print_func(f"[{index}/{len(senders)}] {sender['email']}")
-        if test_one_sender(config, sender, print_func):
+    print_func(f"并发测试: {workers}并发")
+    jobs = [(index, len(senders), sender) for index, sender in enumerate(senders, 1)]
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        results = list(executor.map(lambda job: smtp_test_result(config, job), jobs))
+    for index, total, sender, smtp, ok, error in results:
+        print_func(f"[{index}/{total}] {sender['email']}")
+        print_func(f"正在测试 {sender['email']} -> {smtp['host']}:{smtp['port']} ...")
+        if ok:
+            print_func("SMTP登录成功。")
             success_count += 1
         else:
             fail_count += 1
+            print_func(f"SMTP登录失败: {error}")
+            print_func(smtp_failure_hint(error))
     print_func(f"测试完成：成功 {success_count} 个，失败 {fail_count} 个")
+
+
+def smtp_test_result(config: dict[str, Any], job: tuple[int, int, dict[str, Any]]):
+    """执行单个SMTP登录测试并返回结果。"""
+    index, total, sender = job
+    smtp = config_manager.resolve_sender_smtp(config, sender)
+    smtp["proxy"] = config.get("smtp_proxy", {})
+    try:
+        mailer.test_smtp_login(smtp, sender)
+        return index, total, sender, smtp, True, None
+    except Exception as error:
+        return index, total, sender, smtp, False, error
 
 
 def test_one_sender(config: dict[str, Any], sender: dict[str, Any], print_func: PrintFunc) -> bool:
@@ -311,6 +338,134 @@ def test_one_sender(config: dict[str, Any], sender: dict[str, Any], print_func: 
         print_func(f"SMTP登录失败: {error}")
         print_func(smtp_failure_hint(error))
         return False
+
+
+def manage_templates(config_path: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
+    """运行邮件模板管理菜单。"""
+    template_dir = template_dir_from_config(config_path)
+    while True:
+        clear_screen(input_func, print_func)
+        print_header("邮件模板管理", print_func)
+        print_func(f"模板目录: {template_dir}")
+        print_menu(
+            [
+                ("1", "查看模板"),
+                ("2", "新增模板"),
+                ("3", "打开/修改模板"),
+                ("4", "删除模板"),
+                ("0", "返回主菜单"),
+            ],
+            print_func,
+        )
+        choice = input_func("请选择功能: ").strip()
+        if choice == "1":
+            list_templates(template_dir, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "2":
+            create_template_interactive(template_dir, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "3":
+            open_template_interactive(template_dir, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "4":
+            delete_template_interactive(template_dir, input_func, print_func)
+            pause_after_action(input_func, print_func)
+        elif choice == "0":
+            return
+        else:
+            print_func("请输入菜单里的数字。")
+
+
+def template_dir_from_config(config_path: Path) -> Path:
+    """按配置文件位置推导邮件模板目录。"""
+    return config_path.resolve().parent.parent / "Mails" / "邮件模板"
+
+
+def list_templates(template_dir: Path, print_func: PrintFunc) -> list[Path]:
+    """展示邮件模板列表。"""
+    try:
+        files = templates.list_template_files(template_dir)
+    except FileNotFoundError:
+        print_func("暂无模板目录，新增模板时会自动创建。")
+        return []
+    if not files:
+        print_func("暂无邮件模板。")
+        return []
+    print_func("序号  模板文件")
+    print_func("-" * 72)
+    for index, file_path in enumerate(files, 1):
+        print_func(f"{index:<4}  {file_path.name}")
+    return files
+
+
+def create_template_interactive(template_dir: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
+    """交互式新增邮件模板。"""
+    name = input_func("模板名称，输入0返回上一层: ").strip()
+    if is_back_command(name):
+        print_returned(print_func)
+        return
+    try:
+        template_path = templates.create_template_file(template_dir, name)
+    except (ValueError, FileExistsError) as error:
+        print_func(f"创建失败: {error}")
+        return
+    print_func(f"已创建模板: {template_path.name}")
+    print_func("已写入“邮件主题：”和“邮件正文：”，打开后直接填写内容。")
+    open_template_file(template_path)
+
+
+def open_template_interactive(template_dir: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
+    """选择并打开邮件模板。"""
+    template_path = pick_template(template_dir, input_func, print_func)
+    if not template_path:
+        return
+    open_template_file(template_path)
+    print_func(f"已打开模板: {template_path.name}")
+
+
+def delete_template_interactive(template_dir: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
+    """选择并删除邮件模板。"""
+    template_path = pick_template(template_dir, input_func, print_func)
+    if not template_path:
+        return
+    confirm = input_func(f"确认删除 {template_path.name}？输入 DELETE 确认，输入0返回上一层: ").strip()
+    if is_back_command(confirm):
+        print_returned(print_func)
+        return
+    if confirm != "DELETE":
+        print_func("已取消删除。")
+        return
+    template_path.unlink()
+    print_func("已删除模板。")
+
+
+def pick_template(template_dir: Path, input_func: InputFunc, print_func: PrintFunc) -> Path | None:
+    """让用户选择一个模板文件。"""
+    files = list_templates(template_dir, print_func)
+    if not files:
+        return None
+    raw_index = input_func("请输入模板序号，输入0返回上一层: ").strip()
+    if is_back_command(raw_index):
+        print_returned(print_func)
+        return None
+    try:
+        index = int(raw_index)
+    except ValueError:
+        print_func("序号必须是数字。")
+        return None
+    if index < 1 or index > len(files):
+        print_func("序号超出范围。")
+        return None
+    return files[index - 1]
+
+
+def open_template_file(template_path: Path) -> None:
+    """用系统默认编辑器打开模板文件。"""
+    if sys.platform.startswith("win"):
+        os.startfile(template_path)  # type: ignore[attr-defined]
+        return
+    command = "open" if sys.platform == "darwin" else "xdg-open"
+    subprocess.Popen([command, str(template_path)])
 
 
 def validate_sender_login_before_save(
@@ -524,7 +679,13 @@ def smtp_failure_hint(error: Exception) -> str:
             "或填了网页登录密码。Gmail 请先开启两步验证并使用16位应用专用密码，"
             "GMX 请确认SMTP密码可用。"
         )
-    if "timed out" in text or "timeout" in text or "network" in text:
+    if (
+        "timed out" in text
+        or "timeout" in text
+        or "network" in text
+        or "connection refused" in text
+        or "代理端口" in text
+    ):
         return (
             "排查建议: 当前网络到SMTP服务器不稳定。程序会自动尝试本机代理端口，"
             "仍失败时请确认网络能访问对应SMTP服务器，例如 smtp.gmail.com 或 mail.gmx.com。"

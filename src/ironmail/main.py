@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 批量邮件发送脚本
-支持多个Gmail邮箱轮换发送
+支持多个SMTP邮箱轮换发送
 """
 
 from __future__ import annotations
@@ -523,6 +523,7 @@ def verify_before_console(config_path: Path) -> bool:
     while True:
         print("正在连接授权服务器，请稍候...")
         if verify_license(config):
+            config_manager.save_config(config_path, config)
             return True
         retry = input("授权验证未通过。输入 Y 重新输入授权码，或直接回车退出: ").strip().upper()
         if retry != "Y":

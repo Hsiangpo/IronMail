@@ -13,6 +13,7 @@ import pandas as pd
 VARIABLE_PATTERN = re.compile(r"{{\s*([^{}]+?)\s*}}")
 SUBJECT_PREFIXES = ("邮件主题：", "邮件主题:", "主题：", "主题:")
 BODY_PREFIXES = ("邮件正文：", "邮件正文:", "正文：", "正文:")
+TEMPLATE_SCAFFOLD = "邮件主题：\n\n邮件正文：\n"
 
 
 @dataclass(frozen=True)
@@ -39,14 +40,25 @@ def parse_template_file(template_path: Path) -> EmailTemplate:
     if not lines:
         raise ValueError("模板为空，请填写邮件主题和邮件正文。")
 
-    subject = _read_prefixed_value(lines[0], SUBJECT_PREFIXES)
+    subject, body = _read_template_sections(lines)
     if subject is None:
         raise ValueError("模板第一行必须以“邮件主题：”或“主题：”开头。")
-
-    body = _read_body(lines[1:])
+    if not subject.strip():
+        raise ValueError("模板邮件主题不能为空。")
     if not body.strip():
         raise ValueError("模板邮件正文不能为空。")
     return EmailTemplate(subject=subject.strip(), body=body, path=template_path)
+
+
+def create_template_file(template_dir: Path, name: str) -> Path:
+    """创建可编辑的邮件模板文件。"""
+    template_dir.mkdir(parents=True, exist_ok=True)
+    filename = _template_filename(name)
+    template_path = template_dir / filename
+    if template_path.exists():
+        raise FileExistsError(f"模板已存在: {template_path.name}")
+    template_path.write_text(TEMPLATE_SCAFFOLD, encoding="utf-8")
+    return template_path
 
 
 def render_template(template: EmailTemplate, row: pd.Series) -> tuple[str, str]:
@@ -93,6 +105,31 @@ def _read_prefixed_value(line: str, prefixes: tuple[str, ...]) -> str | None:
     return None
 
 
+def _read_template_sections(lines: list[str]) -> tuple[str | None, str]:
+    """读取主题和正文，兼容单行和分块模板。"""
+    subject_inline = _read_prefixed_value(lines[0], SUBJECT_PREFIXES)
+    if subject_inline is None:
+        return None, ""
+    body_index = _find_prefixed_line(lines[1:], BODY_PREFIXES)
+    if body_index is None:
+        return subject_inline, _read_body(lines[1:])
+    body_index += 1
+    if subject_inline.strip():
+        subject = subject_inline
+    else:
+        subject_lines = [line for line in lines[1:body_index] if line.strip()]
+        subject = "\n".join(subject_lines).strip()
+    return subject, _read_body(lines[body_index:])
+
+
+def _find_prefixed_line(lines: list[str], prefixes: tuple[str, ...]) -> int | None:
+    """查找带指定前缀的行。"""
+    for index, line in enumerate(lines):
+        if _read_prefixed_value(line, prefixes) is not None:
+            return index
+    return None
+
+
 def _read_body(lines: list[str]) -> str:
     """读取正文，兼容带“邮件正文：”标记和直接写正文两种格式。"""
     for index, line in enumerate(lines):
@@ -105,6 +142,16 @@ def _read_body(lines: list[str]) -> str:
         body_lines.extend(lines[index + 1:])
         return "\n".join(body_lines).strip()
     return "\n".join(lines).strip()
+
+
+def _template_filename(name: str) -> str:
+    """生成安全的模板文件名。"""
+    cleaned = re.sub(r'[\\/:*?"<>|]+', "-", name.strip()).strip(". ")
+    if not cleaned:
+        raise ValueError("模板名称不能为空")
+    if not cleaned.lower().endswith(".md"):
+        cleaned = f"{cleaned}.md"
+    return cleaned
 
 
 def _replace_variables(text: str, values: dict[str, str]) -> str:

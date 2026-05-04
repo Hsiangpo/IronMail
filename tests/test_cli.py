@@ -183,6 +183,40 @@ def test_sender_menu_tests_all_smtp_accounts(tmp_path, monkeypatch):
     assert any("应用专用密码" in line for line in output)
 
 
+def test_sender_menu_tests_all_smtp_accounts_with_parallel_limit(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    config = config_manager.load_config(config_path)
+    config["senders"] = [
+        {"email": f"sender{index}@gmail.com", "password": "password", "name": str(index)}
+        for index in range(70)
+    ]
+    config_manager.save_config(config_path, config)
+    observed_workers = []
+
+    class FakeExecutor:
+        def __init__(self, max_workers):
+            observed_workers.append(max_workers)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, func, items):
+            return [func(item) for item in items]
+
+    monkeypatch.setattr("ironmail.cli.ThreadPoolExecutor", FakeExecutor)
+    monkeypatch.setattr("ironmail.cli.mailer.test_smtp_login", lambda smtp, sender: True)
+    output = []
+
+    cli.test_all_senders_interactive(config, output.append)
+
+    assert observed_workers == [64]
+    assert any("64并发" in line for line in output)
+
+
 def test_settings_menu_updates_rotation_without_yaml_editing(tmp_path):
     config_path = tmp_path / "config" / "config.yaml"
     write_config(config_path)
@@ -318,3 +352,32 @@ def test_pause_after_action_is_skipped_for_test_input():
     cli.pause_after_action(inputs, output.append)
 
     assert output == []
+
+
+def test_template_menu_creates_template_and_opens_file(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    opened = []
+    inputs = make_input(["2", "德国邀请", "0"])
+    monkeypatch.setattr("ironmail.cli.open_template_file", lambda path: opened.append(path))
+
+    cli.manage_templates(config_path, inputs, lambda line: None)
+
+    template_path = tmp_path / "Mails" / "邮件模板" / "德国邀请.md"
+    assert template_path.exists()
+    assert template_path.read_text(encoding="utf-8") == "邮件主题：\n\n邮件正文：\n"
+    assert opened == [template_path]
+
+
+def test_template_menu_deletes_template_after_confirmation(tmp_path):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    template_dir = tmp_path / "Mails" / "邮件模板"
+    template_dir.mkdir(parents=True)
+    template_path = template_dir / "旧模板.md"
+    template_path.write_text("邮件主题：测试\n\n邮件正文：测试", encoding="utf-8")
+    inputs = make_input(["4", "1", "DELETE", "0"])
+
+    cli.manage_templates(config_path, inputs, lambda line: None)
+
+    assert not template_path.exists()

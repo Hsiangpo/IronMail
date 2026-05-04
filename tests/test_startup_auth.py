@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from ironmail import cli, config_manager
-from ironmail.main import ensure_license_code, run_send_flow
+from ironmail.main import ensure_license_code, run_send_flow, verify_before_console
 
 
 def test_ensure_license_code_prompts_when_missing(monkeypatch, capsys):
@@ -94,3 +94,33 @@ settings:
     )
 
     assert not hasattr(__import__("ironmail.main").main, "show_disclaimer")
+
+
+def test_verified_license_is_saved_to_config(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        """
+license:
+  server_url: https://tmpmail.oldiron.us
+  code:
+smtp:
+  host: smtp.gmail.com
+  port: 465
+  use_ssl: true
+senders: []
+settings:
+  emails_per_account: 1
+  delay_seconds: 12
+  max_retries: 3
+  log_file: logs/send_log.txt
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": "IM-AAAAAA-BBBBBB-CCCCCC-DDDDDD")
+    monkeypatch.setattr("ironmail.main.verify_license", lambda config: True)
+
+    assert verify_before_console(config_path) is True
+
+    saved = config_manager.load_config(config_path)
+    assert saved["license"]["code"] == "IM-AAAAAA-BBBBBB-CCCCCC-DDDDDD"
