@@ -215,9 +215,6 @@ def choose_data_file(app_dir: Path, excel_file: Optional[str] = None) -> Path | 
     data_files = list_data_files(data_dir)
     if not data_files:
         raise FileNotFoundError(f"未找到xlsx或csv文件，请将表格放入 {data_dir}")
-    if len(data_files) == 1:
-        print(f"检测到 1 个表格，自动使用: {data_files[0].name}")
-        return data_files[0]
 
     cli.clear_screen(input, print)
     print_selection_panel("选择收件人表格", ["0. 返回主菜单"] + format_file_choices(data_files))

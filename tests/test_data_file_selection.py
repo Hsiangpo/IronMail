@@ -22,13 +22,27 @@ def test_list_data_files_orders_xlsx_before_csv_and_skips_excel_lock(tmp_path):
     assert [file.name for file in files] == ["a.xlsx", "b.csv"]
 
 
-def test_choose_data_file_auto_uses_single_file(tmp_path):
+def test_choose_data_file_prompts_even_when_single_file(tmp_path, monkeypatch, capsys):
     mails_dir = tmp_path / "Mails"
     mails_dir.mkdir()
     target = mails_dir / "only.csv"
     target.write_text("x", encoding="utf-8")
+    monkeypatch.setattr("builtins.input", lambda prompt="": "1")
 
     assert choose_data_file(tmp_path).name == "only.csv"
+    output = capsys.readouterr().out
+    assert "选择收件人表格" in output
+    assert "only.csv" in output
+
+
+def test_choose_data_file_uses_explicit_config_without_prompt(tmp_path, monkeypatch):
+    mails_dir = tmp_path / "Mails"
+    mails_dir.mkdir()
+    target = mails_dir / "fixed.csv"
+    target.write_text("x", encoding="utf-8")
+    monkeypatch.setattr("builtins.input", lambda prompt="": (_ for _ in ()).throw(AssertionError("不应要求输入")))
+
+    assert choose_data_file(tmp_path, "fixed.csv").name == "fixed.csv"
 
 
 def test_choose_data_file_prompts_when_multiple_files(tmp_path, monkeypatch):

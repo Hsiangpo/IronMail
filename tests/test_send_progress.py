@@ -96,7 +96,7 @@ def test_send_flow_resumes_failed_run_without_resending_success(tmp_path, monkey
     write_runtime_config(config_path)
     write_runtime_files(tmp_path)
     monkeypatch.setattr("ironmail.main.time.sleep", lambda seconds: None)
-    first_inputs = iter(["1"])
+    first_inputs = iter(["1", "1"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(first_inputs))
     sent = []
 
@@ -110,7 +110,7 @@ def test_send_flow_resumes_failed_run_without_resending_success(tmp_path, monkey
 
     run_send_flow(tmp_path, config_path)
 
-    second_inputs = iter(["1", "Y"])
+    second_inputs = iter(["1", "1", "Y"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(second_inputs))
     monkeypatch.setattr("ironmail.mailer.send_email", lambda *args: sent.append(args[2]) or True)
 
@@ -130,7 +130,7 @@ def test_completed_run_can_be_cancelled_to_avoid_duplicate_send(tmp_path, monkey
     run_send_flow(tmp_path, config_path)
 
     sent = []
-    inputs = iter(["1", "N"])
+    inputs = iter(["1", "1", "N"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
     monkeypatch.setattr("ironmail.mailer.send_email", lambda *args: sent.append(args[2]) or True)
 
