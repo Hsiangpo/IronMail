@@ -1,0 +1,5 @@
+certifi
+openpyxl
+pandas
+pyinstaller
+pyyaml

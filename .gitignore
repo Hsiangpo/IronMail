@@ -1,0 +1,21 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+.venv/
+.venv-test/
+build/
+dist/
+*.spec
+
+config/config.yaml
+logs/
+docs/vps.md
+
+# Recipient spreadsheets may contain real customer data.
+Mails/收件人名单/*.xlsx
+Mails/收件人名单/*.xlsm
+Mails/收件人名单/*.xls
+Mails/收件人名单/~$*

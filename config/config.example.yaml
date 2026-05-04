@@ -1,0 +1,31 @@
+license:
+  server_url: https://tmpmail.oldiron.us
+  code:
+  timeout_seconds: 10
+smtp:
+  host: smtp.gmail.com
+  port: 465
+  use_ssl: true
+smtp_proxy:
+  mode: auto
+  type: http
+  host: 127.0.0.1
+  port: 7897
+  candidate_ports:
+    - 7897
+    - 7890
+    - 7891
+    - 1080
+    - 1087
+    - 10809
+  connect_timeout_seconds: 8
+senders:
+  - email:
+    password:
+    name: IronMail
+excel_file:
+settings:
+  delay_seconds: 12
+  max_retries: 3
+  emails_per_account: 1
+  log_file: logs/send_log.txt
