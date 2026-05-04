@@ -6,13 +6,29 @@ from ironmail import config_manager
 from ironmail.main import ensure_license_code, run_send_flow
 
 
-def test_ensure_license_code_prompts_when_missing(monkeypatch):
+def test_ensure_license_code_prompts_when_missing(monkeypatch, capsys):
     config = config_manager.normalize_config({"license": {"server_url": "https://tmpmail.oldiron.us"}})
     monkeypatch.setattr("builtins.input", lambda prompt="": "IM-AAAAAA-BBBBBB-CCCCCC-DDDDDD")
 
     ensure_license_code(config)
 
     assert config["license"]["code"] == "IM-AAAAAA-BBBBBB-CCCCCC-DDDDDD"
+    output = capsys.readouterr().out
+    assert "IronMail 授权验证" in output
+    assert "授权状态" in output
+    assert "https://tmpmail.oldiron.us" in output
+
+
+def test_ensure_license_code_allows_exit_with_zero(monkeypatch, capsys):
+    config = config_manager.normalize_config({"license": {"server_url": "https://tmpmail.oldiron.us"}})
+    prompts = []
+    monkeypatch.setattr("builtins.input", lambda prompt="": prompts.append(prompt) or "0")
+
+    ensure_license_code(config)
+
+    assert config["license"].get("code") in (None, "")
+    assert any("授权码（输入0退出）" in prompt for prompt in prompts)
+    assert "输入 0 可退出程序" in capsys.readouterr().out
 
 
 def test_ensure_license_code_keeps_existing_code(monkeypatch):

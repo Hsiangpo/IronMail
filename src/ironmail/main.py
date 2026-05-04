@@ -65,6 +65,7 @@ TEMPLATE_DIR_NAME = "邮件模板"
 LEGACY_TEMPLATE_DIR_NAME = "模板"
 REQUIRED_WITH_TEMPLATE = ["邮箱"]
 REQUIRED_WITHOUT_TEMPLATE = ["邮箱", "邮件主题", "邮件正文"]
+AUTH_PANEL_WIDTH = 72
 
 
 def log_message(log_file: str, message: str):
@@ -494,14 +495,20 @@ def verify_before_console(config_path: Path) -> bool:
     """进入控制台前完成授权验证"""
     config = config_manager.load_config(config_path)
     ensure_license_code(config)
+    if not str(config.get("license", {}).get("code") or "").strip():
+        print("未输入授权码，程序退出。")
+        return False
     while True:
-        print("正在验证授权...")
+        print("正在连接授权服务器，请稍候...")
         if verify_license(config):
             return True
-        retry = input("授权验证未通过，是否重新输入授权码？(Y/N): ").strip().upper()
+        retry = input("授权验证未通过。输入 Y 重新输入授权码，或直接回车退出: ").strip().upper()
         if retry != "Y":
             return False
-        config["license"]["code"] = input("请输入新的授权码: ").strip()
+        config["license"]["code"] = ""
+        ensure_license_code(config)
+        if not str(config.get("license", {}).get("code") or "").strip():
+            return False
 
 
 def ensure_license_code(config: dict) -> None:
@@ -510,9 +517,39 @@ def ensure_license_code(config: dict) -> None:
     code = str(license_config.get("code") or "").strip()
     if code:
         return
-    code = input("请输入授权码: ").strip()
+    print_license_entry_panel(config)
+    code = input("授权码（输入0退出）: ").strip()
+    if code == "0":
+        return
     if code:
         license_config["code"] = code
+
+
+def print_license_entry_panel(config: dict) -> None:
+    """打印启动授权输入页"""
+    license_config = config.get("license") or {}
+    server_url = str(license_config.get("server_url") or "未配置").strip()
+    lines = [
+        ("产品", "IronMail 邮件发送控制台"),
+        ("授权状态", "等待输入授权码"),
+        ("验证服务器", server_url),
+        ("授权码格式", "IM-XXXXXX-XXXXXX-XXXXXX-XXXXXX"),
+    ]
+    print("")
+    print("=" * AUTH_PANEL_WIDTH)
+    print(center_text("IronMail 授权验证", AUTH_PANEL_WIDTH))
+    print("=" * AUTH_PANEL_WIDTH)
+    for label, value in lines:
+        print(f"{label:<10} {value}")
+    print("-" * AUTH_PANEL_WIDTH)
+    print("请输入管理员提供的授权码。输入 0 可退出程序。")
+    print("=" * AUTH_PANEL_WIDTH)
+
+
+def center_text(text: str, width: int) -> str:
+    """按终端宽度简单居中文本。"""
+    padding = max(0, width - len(text)) // 2
+    return f"{' ' * padding}{text}"
 
 
 def main():
