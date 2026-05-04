@@ -195,7 +195,7 @@ def _page(title: str, body: str) -> str:
     }}
     header strong {{ font-size: 17px; letter-spacing: 0; }}
     header span {{ color: #cbd5e1; font-size: 13px; }}
-    main.dashboard-shell {{ max-width: 1180px; margin: 28px auto 48px; padding: 0 20px; }}
+    main.dashboard-shell {{ width: calc(100% - 64px); max-width: none; margin: 28px auto 48px; padding: 0; }}
     .page-title {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }}
     .page-title h1 {{ margin: 0; font-size: 28px; letter-spacing: 0; }}
     .page-title p {{ margin: 8px 0 0; color: var(--muted); }}
@@ -251,21 +251,22 @@ def _page(title: str, body: str) -> str:
       border-radius: 7px;
       font-weight: 800;
       letter-spacing: 0.02em;
-      overflow-x: auto;
+      overflow: hidden;
     }}
     .error {{ background: #fef2f2; color: #991b1b; padding: 12px; border-radius: 7px; border: 1px solid #fecaca; }}
-    .table-shell {{ overflow-x: auto; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }}
-    table {{ width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1080px; }}
-    th, td {{ padding: 14px 12px; border-bottom: 1px solid #e8eef6; text-align: left; vertical-align: middle; }}
+    .table-shell {{ overflow: visible; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }}
+    table {{ width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }}
+    th, td {{ padding: 12px 10px; border-bottom: 1px solid #e8eef6; text-align: left; vertical-align: middle; white-space: nowrap; }}
     th {{ background: #f1f5f9; color: #334155; font-size: 13px; font-weight: 800; }}
     tbody tr:hover {{ background: var(--surface-soft); }}
     tbody tr:last-child td {{ border-bottom: 0; }}
+    .status-cell {{ display: inline-flex; align-items: center; gap: 8px; }}
+    .status-cell select {{ width: 86px; padding: 8px 10px; }}
     .status-badge {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 800; }}
     .status-active {{ background: var(--success-bg); color: var(--success-text); }}
     .status-disabled {{ background: var(--warning-bg); color: var(--warning-text); }}
-    .status-badge + select {{ margin-top: 8px; }}
-    .value-cell {{ display: grid; gap: 8px; min-width: 170px; }}
-    .compact-value {{ color: #1e293b; font-weight: 800; word-break: break-all; }}
+    .value-cell {{ display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }}
+    .compact-value {{ min-width: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1e293b; font-weight: 800; }}
     .link-button {{
       width: fit-content;
       padding: 6px 10px;
@@ -275,43 +276,21 @@ def _page(title: str, body: str) -> str:
       font-size: 12px;
     }}
     .link-button:hover {{ background: #dbeafe; }}
-    .modal-backdrop {{
-      position: fixed;
-      inset: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      background: rgba(15, 23, 42, 0.5);
-      z-index: 20;
-    }}
+    .modal-backdrop {{ position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 24px; background: rgba(15, 23, 42, 0.5); z-index: 20; }}
     .modal-backdrop.open {{ display: flex; }}
-    .modal-card {{
-      width: min(720px, 100%);
-      max-height: min(70vh, 620px);
-      overflow: auto;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25);
-    }}
-    .modal-head {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 18px 20px;
-      border-bottom: 1px solid var(--line);
-    }}
+    .modal-card {{ width: min(720px, 100%); max-height: min(70vh, 620px); overflow: auto; background: #fff; border-radius: 8px; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25); }}
+    .modal-head {{ display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--line); }}
     .modal-head h2 {{ margin: 0; font-size: 18px; }}
     .modal-body {{ padding: 20px; white-space: pre-wrap; word-break: break-all; line-height: 1.6; }}
-    .actions {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+    .actions {{ display: inline-flex; gap: 8px; flex-wrap: nowrap; }}
+    .actions button {{ padding: 9px 12px; }}
     .actions form {{ margin: 0; }}
     .empty-state {{ padding: 28px; color: var(--muted); text-align: center; }}
     .login-shell {{ max-width: 420px; margin: 70px auto; padding: 0 20px; }}
     .login-shell h1 {{ margin-top: 0; }}
     @media (max-width: 780px) {{
       header {{ padding: 16px 18px; }}
-      main.dashboard-shell {{ margin-top: 20px; padding: 0 14px; }}
+      main.dashboard-shell {{ width: calc(100% - 28px); margin-top: 20px; }}
       .page-title, .toolbar {{ display: grid; }}
       .stat-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
       .create-form {{ grid-template-columns: 1fr; }}
@@ -438,6 +417,17 @@ def _license_table(licenses: list[dict[str, Any]]) -> str:
     return f"""
 <div class="table-shell">
   <table>
+    <colgroup>
+      <col style="width: 52px">
+      <col style="width: 220px">
+      <col style="width: 120px">
+      <col style="width: 150px">
+      <col style="width: 170px">
+      <col>
+      <col style="width: 220px">
+      <col style="width: 76px">
+      <col style="width: 220px">
+    </colgroup>
     <thead>
       <tr>
         <th>ID</th><th>完整授权码</th><th>备注</th><th>状态</th><th>到期日</th>
@@ -468,10 +458,10 @@ def _license_row(item: dict[str, Any]) -> str:
     <form id="{update_form_id}" method="post" action="/admin/licenses/{license_id}/update"></form>
     <input form="{update_form_id}" name="note" value="{escape(item.get("note") or "")}">
   </td>
-  <td>
+  <td><div class="status-cell">
     {_status_badge(status)}
     <select form="{update_form_id}" name="status">{status_options}</select>
-  </td>
+  </div></td>
   <td><input form="{update_form_id}" name="expires_at" type="date" value="{escape(expires_at)}"></td>
   <td>{_detail_value("绑定设备", bound_device, 26)}</td>
   <td>{_detail_value("最后验证", last_seen, 20)}</td>

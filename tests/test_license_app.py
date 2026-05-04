@@ -69,6 +69,8 @@ def test_admin_license_page_uses_polished_layout(tmp_path, monkeypatch):
     assert "dashboard-shell" in html
     assert "stat-grid" in html
     assert "table-shell" in html
+    assert "width: calc(100% - 64px)" in html
+    assert "overflow-x: auto" not in html
     assert "状态总览" in html
     assert "页面测试" in html
     assert "授权码前缀" not in html
