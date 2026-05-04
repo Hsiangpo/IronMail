@@ -58,12 +58,13 @@ COLORS = {
 
 SMTP_REFERENCE_LINES = [
     "Gmail / Google Workspace：SMTP 服务器 smtp.gmail.com；SSL 用 465，STARTTLS 用 587；密码填写 Google 账号生成的 16 位应用专用密码，不是网页登录密码。",
+    "Gmail 应用专用密码获取地址：https://myaccount.google.com/apppasswords",
     "GMX：SMTP 服务器 mail.gmx.com；SSL/TLS 用 465，STARTTLS 用 587；密码填写 GMX 可用于 SMTP 的密码或应用密码。",
     "其他邮箱：使用服务商后台提供的 SMTP 地址、端口和安全方式。465 通常勾选 SSL，587 通常关闭 SSL 走 STARTTLS。",
 ]
 SMTP_REFERENCE_LINKS = [
+    ("获取 Gmail 应用专用密码", "https://myaccount.google.com/apppasswords"),
     ("Gmail SMTP 官方说明", "https://support.google.com/a/answer/176600"),
-    ("Google 应用专用密码", "https://support.google.com/accounts/answer/185833"),
     ("GMX SMTP 官方参数", "https://support.gmx.com/pop-imap/imap/server.html"),
 ]
 
