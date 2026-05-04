@@ -9,6 +9,7 @@ from ironmail.main import ensure_license_code, run_send_flow, verify_before_cons
 def test_ensure_license_code_prompts_when_missing(monkeypatch, capsys):
     config = config_manager.normalize_config({"license": {"server_url": "https://tmpmail.oldiron.us"}})
     monkeypatch.setattr("builtins.input", lambda prompt="": "IM-AAAAAA-BBBBBB-CCCCCC-DDDDDD")
+    monkeypatch.setattr("ironmail.cli.clear_windows_console", lambda: False)
 
     ensure_license_code(config)
 

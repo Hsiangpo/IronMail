@@ -22,6 +22,40 @@ PANEL_WIDTH = 72
 CLEAR_SCREEN_SEQUENCE = "\033[2J\033[3J\033[H"
 
 
+def configure_terminal_encoding() -> None:
+    """配置Windows终端编码，避免中文输出乱码。"""
+    if not sys.platform.startswith("win"):
+        return
+    set_windows_console_utf8()
+    reconfigure_standard_streams("utf-8")
+
+
+def set_windows_console_utf8() -> bool:
+    """把Windows控制台输入/输出代码页切到UTF-8。"""
+    try:
+        import ctypes
+    except Exception:
+        return False
+
+    kernel32 = ctypes.windll.kernel32
+    output_ok = bool(kernel32.SetConsoleOutputCP(65001))
+    input_ok = bool(kernel32.SetConsoleCP(65001))
+    return output_ok and input_ok
+
+
+def reconfigure_standard_streams(encoding: str) -> None:
+    """重配Python标准流编码；不支持reconfigure的流直接跳过。"""
+    for stream_name in ("stdin", "stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding=encoding, errors="replace")
+        except Exception:
+            continue
+
+
 def run_console(
     config_path: Path,
     start_send: Callable[[], None],
@@ -869,9 +903,16 @@ def smtp_failure_hint(error: Exception) -> str:
 def clear_screen(input_func: InputFunc, print_func: PrintFunc, force: bool = False) -> None:
     """真实终端下清屏，测试注入输入时不输出控制字符。"""
     if force and is_builtin_console(input_func, print_func):
-        emit_clear_sequence(print_func)
+        emit_clear_screen(print_func)
         return
     if not is_real_terminal(input_func, print_func):
+        return
+    emit_clear_screen(print_func)
+
+
+def emit_clear_screen(print_func: PrintFunc) -> None:
+    """按当前终端选择可用的清屏方式。"""
+    if sys.platform.startswith("win") and clear_windows_console():
         return
     emit_clear_sequence(print_func)
 
@@ -880,6 +921,65 @@ def emit_clear_sequence(print_func: PrintFunc) -> None:
     """输出清屏并清除滚动历史的控制符。"""
     print_func(CLEAR_SCREEN_SEQUENCE, end="")
     sys.stdout.flush()
+
+
+def clear_windows_console() -> bool:
+    """使用Windows控制台API清屏；非真实控制台时返回False。"""
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except Exception:
+        return False
+
+    class COORD(ctypes.Structure):
+        _fields_ = [("X", wintypes.SHORT), ("Y", wintypes.SHORT)]
+
+    class SMALL_RECT(ctypes.Structure):
+        _fields_ = [
+            ("Left", wintypes.SHORT),
+            ("Top", wintypes.SHORT),
+            ("Right", wintypes.SHORT),
+            ("Bottom", wintypes.SHORT),
+        ]
+
+    class CONSOLE_SCREEN_BUFFER_INFO(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", COORD),
+            ("dwCursorPosition", COORD),
+            ("wAttributes", wintypes.WORD),
+            ("srWindow", SMALL_RECT),
+            ("dwMaximumWindowSize", COORD),
+        ]
+
+    kernel32 = ctypes.windll.kernel32
+    stdout_handle = kernel32.GetStdHandle(-11)
+    if stdout_handle in (0, -1):
+        return False
+
+    screen_info = CONSOLE_SCREEN_BUFFER_INFO()
+    if not kernel32.GetConsoleScreenBufferInfo(stdout_handle, ctypes.byref(screen_info)):
+        return False
+
+    origin = COORD(0, 0)
+    cell_count = int(screen_info.dwSize.X) * int(screen_info.dwSize.Y)
+    written = wintypes.DWORD()
+    if not kernel32.FillConsoleOutputCharacterW(
+        stdout_handle,
+        " ",
+        cell_count,
+        origin,
+        ctypes.byref(written),
+    ):
+        return False
+    if not kernel32.FillConsoleOutputAttribute(
+        stdout_handle,
+        screen_info.wAttributes,
+        cell_count,
+        origin,
+        ctypes.byref(written),
+    ):
+        return False
+    return bool(kernel32.SetConsoleCursorPosition(stdout_handle, origin))
 
 
 def pause_after_action(input_func: InputFunc, print_func: PrintFunc) -> None:

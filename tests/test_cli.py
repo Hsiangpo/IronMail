@@ -302,6 +302,7 @@ def test_console_clears_before_starting_send(monkeypatch, tmp_path):
     monkeypatch.setattr("builtins.print", lambda text="", end="\n": output.append((text, end)))
     monkeypatch.setattr("ironmail.cli.sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("ironmail.cli.sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr("ironmail.cli.clear_windows_console", lambda: False)
 
     cli.run_console(config_path, lambda: started.append(True), input, print, license_verified=True)
 
@@ -319,6 +320,7 @@ def test_console_forces_clear_for_builtin_terminal_even_when_isatty_false(monkey
     monkeypatch.setattr("builtins.print", lambda text="", end="\n": output.append((text, end)))
     monkeypatch.setattr("ironmail.cli.sys.stdin.isatty", lambda: False)
     monkeypatch.setattr("ironmail.cli.sys.stdout.isatty", lambda: False)
+    monkeypatch.setattr("ironmail.cli.clear_windows_console", lambda: False)
 
     cli.run_console(config_path, lambda: None, input, print, license_verified=True)
 
@@ -396,10 +398,49 @@ def test_console_uses_single_screen_refresh_for_real_terminal(monkeypatch):
     monkeypatch.setattr("builtins.print", lambda text="", end="\n": output.append((text, end)))
     monkeypatch.setattr("ironmail.cli.sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("ironmail.cli.sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr("ironmail.cli.clear_windows_console", lambda: False)
 
     cli.clear_screen(input, print)
 
     assert output == [(cli.CLEAR_SCREEN_SEQUENCE, "")]
+
+
+def test_console_uses_windows_api_clear_when_available(monkeypatch):
+    output = []
+    calls = []
+    monkeypatch.setattr("ironmail.cli.sys.platform", "win32")
+    monkeypatch.setattr("ironmail.cli.clear_windows_console", lambda: calls.append("clear") or True)
+
+    cli.emit_clear_screen(lambda text="", end="\n": output.append((text, end)))
+
+    assert calls == ["clear"]
+    assert output == []
+
+
+def test_configure_terminal_encoding_sets_utf8_on_windows(monkeypatch):
+    class Stream:
+        def __init__(self):
+            self.calls = []
+
+        def reconfigure(self, **kwargs):
+            self.calls.append(kwargs)
+
+    stdin = Stream()
+    stdout = Stream()
+    stderr = Stream()
+    calls = []
+    monkeypatch.setattr("ironmail.cli.sys.platform", "win32")
+    monkeypatch.setattr("ironmail.cli.set_windows_console_utf8", lambda: calls.append("codepage") or True)
+    monkeypatch.setattr("ironmail.cli.sys.stdin", stdin)
+    monkeypatch.setattr("ironmail.cli.sys.stdout", stdout)
+    monkeypatch.setattr("ironmail.cli.sys.stderr", stderr)
+
+    cli.configure_terminal_encoding()
+
+    assert calls == ["codepage"]
+    assert stdin.calls == [{"encoding": "utf-8", "errors": "replace"}]
+    assert stdout.calls == [{"encoding": "utf-8", "errors": "replace"}]
+    assert stderr.calls == [{"encoding": "utf-8", "errors": "replace"}]
 
 
 def test_console_does_not_pause_when_stdin_is_piped(monkeypatch):

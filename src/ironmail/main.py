@@ -559,6 +559,7 @@ def center_text(text: str, width: int) -> str:
 
 
 def main():
+    cli.configure_terminal_encoding()
     # 获取程序所在目录
     app_dir = get_app_dir()
     config_path = app_dir / 'config' / 'config.yaml'
