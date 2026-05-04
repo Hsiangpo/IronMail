@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from email.header import decode_header, make_header
+from email.utils import parseaddr
+
 from ironmail import mailer
 
 
@@ -40,9 +43,29 @@ def test_build_message_uses_sender_display_name():
         body="正文",
     )
 
-    assert message["From"] == "销售 <sales@oldiron.us>"
+    display_name, address = parseaddr(message["From"])
+    assert str(make_header(decode_header(display_name))) == "销售"
+    assert address == "sales@oldiron.us"
     assert message["To"] == "buyer@example.com"
     assert "主题" in str(message["Subject"])
+
+
+def test_build_message_uses_bare_from_when_sender_name_is_blank_or_email():
+    blank_name = mailer.build_message(
+        sender={"email": "sender@gmx.com", "name": ""},
+        recipient_email="buyer@example.com",
+        subject="hello",
+        body="body",
+    )
+    email_name = mailer.build_message(
+        sender={"email": "sender@gmx.com", "name": "sender@gmx.com"},
+        recipient_email="buyer@example.com",
+        subject="hello",
+        body="body",
+    )
+
+    assert blank_name["From"] == "sender@gmx.com"
+    assert email_name["From"] == "sender@gmx.com"
 
 
 def test_auto_route_uses_direct_when_it_works(monkeypatch):

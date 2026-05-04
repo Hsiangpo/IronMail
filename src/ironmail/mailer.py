@@ -8,6 +8,7 @@ import ssl
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 from typing import Any
 
 _ROUTE_CACHE: dict[tuple[Any, ...], str] = {}
@@ -63,12 +64,20 @@ def build_message(
 ) -> MIMEMultipart:
     """构造邮件内容"""
     msg = MIMEMultipart()
-    sender_name = sender.get("name") or sender.get("email")
-    msg["From"] = f"{sender_name} <{sender['email']}>"
+    msg["From"] = format_sender_address(sender)
     msg["To"] = recipient_email
     msg["Subject"] = Header(subject, "utf-8")
     msg.attach(MIMEText(body, "plain", "utf-8"))
     return msg
+
+
+def format_sender_address(sender: dict[str, Any]) -> str:
+    """生成发件人From头，空显示名时使用裸邮箱地址。"""
+    email = str(sender["email"]).strip()
+    sender_name = str(sender.get("name") or "").strip()
+    if not sender_name or sender_name.lower() == email.lower():
+        return email
+    return formataddr((str(Header(sender_name, "utf-8")), email))
 
 
 def send_email(
