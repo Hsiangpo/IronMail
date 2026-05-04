@@ -549,12 +549,9 @@ def ensure_license_code(config: dict) -> None:
 
 def print_license_entry_panel(config: dict) -> None:
     """打印启动授权输入页"""
-    license_config = config.get("license") or {}
-    server_url = str(license_config.get("server_url") or "未配置").strip()
     lines = [
         ("产品", "IronMail 邮件发送控制台"),
         ("授权状态", "等待输入授权码"),
-        ("验证服务器", server_url),
         ("授权码格式", "IM-XXXXXX-XXXXXX-XXXXXX-XXXXXX"),
     ]
     print("")

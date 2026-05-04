@@ -16,7 +16,8 @@ def test_ensure_license_code_prompts_when_missing(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "IronMail 授权验证" in output
     assert "授权状态" in output
-    assert "https://tmpmail.oldiron.us" in output
+    assert "验证服务器" not in output
+    assert "https://tmpmail.oldiron.us" not in output
 
 
 def test_ensure_license_code_allows_exit_with_zero(monkeypatch, capsys):
