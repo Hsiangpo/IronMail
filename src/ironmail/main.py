@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -137,17 +138,17 @@ def get_app_dir() -> Path:
 
 
 def list_data_files(data_dir: Path) -> list[Path]:
-    """列出Mails文件夹里的xlsx或csv文件"""
+    """列出Mails文件夹里的表格文件"""
     data_dir = resolve_recipient_dir_from_mails(data_dir)
     return recipient_lists.list_recipient_files(data_dir)
 
 
 def find_data_file(data_dir: Path) -> Path:
-    """自动查找Mails文件夹里的xlsx或csv文件"""
+    """自动查找Mails文件夹里的表格文件"""
     data_files = list_data_files(data_dir)
     if data_files:
         return data_files[0]
-    raise FileNotFoundError(f"未找到xlsx或csv文件，请将表格放入 {data_dir}")
+    raise FileNotFoundError(f"未找到表格文件，请将 .xlsx、.xlsm、.xls 或 .csv 放入 {data_dir}")
 
 
 def get_mails_dir(app_dir: Path) -> Path:
@@ -206,7 +207,7 @@ def choose_data_file(app_dir: Path, excel_file: Optional[str] = None) -> Path | 
 
     data_files = list_data_files(data_dir)
     if not data_files:
-        raise FileNotFoundError(f"未找到xlsx或csv文件，请将表格放入 {data_dir}")
+        raise FileNotFoundError(f"未找到表格文件，请将 .xlsx、.xlsm、.xls 或 .csv 放入 {data_dir}")
 
     cli.clear_screen(input, print)
     print_selection_panel("选择收件人表格", ["0. 返回主菜单"] + format_file_choices(data_files))
@@ -578,5 +579,47 @@ def main():
     cli.run_console(config_path, lambda: run_send_flow(app_dir, config_path), license_verified=True)
 
 
+def run_app() -> int:
+    """运行程序，并把未捕获异常留在屏幕和日志里。"""
+    try:
+        main()
+        return 0
+    except Exception as error:
+        report_unhandled_exception(error)
+        return 1
+
+
+def report_unhandled_exception(error: Exception) -> Path | None:
+    """打印并记录未捕获异常，避免双击运行时窗口直接消失。"""
+    traceback_text = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    print("")
+    print("=" * 72)
+    print("程序发生未处理错误，已停止。")
+    print("=" * 72)
+    print(traceback_text.rstrip())
+    log_path = write_crash_log(traceback_text)
+    if log_path:
+        print(f"错误日志: {log_path}")
+    if cli.is_real_terminal(input, print):
+        input("\n按回车退出...")
+    return log_path
+
+
+def write_crash_log(traceback_text: str) -> Path | None:
+    """写入崩溃日志。"""
+    try:
+        log_path = get_app_dir() / "logs" / "crash.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as file:
+            file.write("\n" + "=" * 72 + "\n")
+            file.write(datetime.now().strftime("[%Y-%m-%d %H:%M:%S] 未处理错误\n"))
+            file.write(traceback_text)
+            if not traceback_text.endswith("\n"):
+                file.write("\n")
+        return log_path
+    except Exception:
+        return None
+
+
 if __name__ == '__main__':
-    main()
+    raise SystemExit(run_app())

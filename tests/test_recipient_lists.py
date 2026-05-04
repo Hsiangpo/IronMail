@@ -43,7 +43,7 @@ def test_manage_recipient_lists_opens_folder_when_adding(tmp_path, monkeypatch):
     assert opened == [tmp_path / "Mails" / "收件名单"]
     joined = "\n".join(output)
     assert "收件名单目录" in joined
-    assert "把 .xlsx 或 .csv 表格拖入这个文件夹" in joined
+    assert "把 .xlsx、.xlsm、.xls 或 .csv 表格拖入这个文件夹" in joined
 
 
 def test_manage_recipient_lists_opens_selected_table(tmp_path, monkeypatch):
@@ -90,3 +90,32 @@ def test_manage_recipient_lists_deletes_selected_table(tmp_path):
     recipient_lists.manage_recipient_lists(config_path, make_input(["4", "1", "DELETE", "0"]), lambda line: None)
 
     assert not table.exists()
+
+
+def test_read_table_supports_gbk_csv(tmp_path):
+    table = tmp_path / "客户.csv"
+    table.write_bytes("网页,法人,邮箱\nexample.com,张三,a@example.com\n".encode("gb18030"))
+
+    df = recipient_lists.read_table(table)
+
+    assert list(df.columns) == ["网页", "法人", "邮箱"]
+    assert df.loc[0, "法人"] == "张三"
+
+
+def test_read_table_supports_gbk_semicolon_csv(tmp_path):
+    table = tmp_path / "客户.csv"
+    table.write_bytes("网页;法人;邮箱\nexample.com;张三;a@example.com\n".encode("gb18030"))
+
+    df = recipient_lists.read_table(table)
+
+    assert list(df.columns) == ["网页", "法人", "邮箱"]
+    assert df.loc[0, "邮箱"] == "a@example.com"
+
+
+def test_read_table_supports_xlsm(tmp_path):
+    table = tmp_path / "客户.xlsm"
+    pd.DataFrame([{"邮箱": "a@example.com"}]).to_excel(table, index=False)
+
+    df = recipient_lists.read_table(table)
+
+    assert df.loc[0, "邮箱"] == "a@example.com"

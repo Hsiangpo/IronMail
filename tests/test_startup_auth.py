@@ -3,7 +3,13 @@
 from pathlib import Path
 
 from ironmail import cli, config_manager
-from ironmail.main import clean_terminal_input, ensure_license_code, run_send_flow, verify_before_console
+from ironmail.main import (
+    clean_terminal_input,
+    ensure_license_code,
+    report_unhandled_exception,
+    run_send_flow,
+    verify_before_console,
+)
 
 
 def test_ensure_license_code_prompts_when_missing(monkeypatch, capsys):
@@ -49,6 +55,17 @@ def test_clean_terminal_input_removes_powershell_pipeline_nuls():
 
 def test_clean_terminal_input_removes_powershell_pipeline_bom():
     assert clean_terminal_input("ďť\udcbf0") == "0"
+
+
+def test_report_unhandled_exception_writes_crash_log(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("ironmail.main.get_app_dir", lambda: tmp_path)
+    monkeypatch.setattr("ironmail.main.cli.is_real_terminal", lambda input_func, print_func: False)
+
+    log_path = report_unhandled_exception(RuntimeError("boom"))
+
+    assert log_path == tmp_path / "logs" / "crash.log"
+    assert "RuntimeError: boom" in log_path.read_text(encoding="utf-8")
+    assert "程序发生未处理错误" in capsys.readouterr().out
 
 
 def test_run_send_flow_does_not_verify_license_again(tmp_path, monkeypatch):

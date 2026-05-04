@@ -11,16 +11,18 @@ from ironmail.main import (
 )
 
 
-def test_list_data_files_orders_xlsx_before_csv_and_skips_excel_lock(tmp_path):
+def test_list_data_files_orders_excel_before_csv_and_skips_excel_lock(tmp_path):
     mails_dir = tmp_path / "Mails" / "收件名单"
     mails_dir.mkdir(parents=True)
-    (mails_dir / "b.csv").write_text("x", encoding="utf-8")
     (mails_dir / "a.xlsx").write_text("x", encoding="utf-8")
+    (mails_dir / "b.xlsm").write_text("x", encoding="utf-8")
+    (mails_dir / "c.xls").write_text("x", encoding="utf-8")
+    (mails_dir / "d.csv").write_text("x", encoding="utf-8")
     (mails_dir / "~$lock.xlsx").write_text("x", encoding="utf-8")
 
     files = list_data_files(mails_dir)
 
-    assert [file.name for file in files] == ["a.xlsx", "b.csv"]
+    assert [file.name for file in files] == ["a.xlsx", "b.xlsm", "c.xls", "d.csv"]
 
 
 def test_choose_data_file_prompts_even_when_single_file(tmp_path, monkeypatch, capsys):

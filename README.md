@@ -9,7 +9,7 @@
 - `server/ironmail_license/`: 授权码后台和验证接口
 - `config/config.example.yaml`: 可提交的示例配置
 - `config/config.yaml`: 本地配置文件，不提交到 Git，正常使用时通过终端菜单修改
-- `Mails/收件名单/`: 收件人表格目录，所有 `.xlsx` / `.csv` 名单都放这里
+- `Mails/收件名单/`: 收件人表格目录，所有 `.xlsx` / `.xlsm` / `.xls` / `.csv` 名单都放这里
 - `Mails/邮件模板/`: 邮件模板目录，所有 `.md` 邮件模板都放这里
 - `Mails/邮件模板/README.md`: 模板写法和变量说明
 - `scripts/`: Windows 运行和打包脚本
@@ -75,7 +75,7 @@ GMX:   直接回车使用默认SMTP设置
 
 ## 表格和模板规则
 
-收件名单统一放在 `Mails/收件名单/` 目录。`config/config.yaml` 里的 `excel_file` 留空时，程序会在开始发送前列出这个目录里的 `.xlsx` / `.csv` 文件，让用户选择本次要发送的表格。只有一个表格时会自动使用。
+收件名单统一放在 `Mails/收件名单/` 目录。`config/config.yaml` 里的 `excel_file` 留空时，程序会在开始发送前列出这个目录里的 `.xlsx` / `.xlsm` / `.xls` / `.csv` 文件，让用户选择本次要发送的表格。CSV 会自动兼容 UTF-8、GBK/GB18030、UTF-16 等常见编码，以及逗号、分号、Tab 等常见分隔符。
 
 新流程推荐把邮件主题和正文放在 `Mails/邮件模板/` 里的 `.md` 模板文件中。发送前程序会在选择收件名单后继续选择邮件模板，然后按每一行数据替换模板变量。
 

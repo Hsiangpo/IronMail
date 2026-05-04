@@ -82,6 +82,9 @@ if (-not (Test-Path $PreferredRecipientDir)) {
 }
 New-Item -ItemType Directory -Path $PreferredRecipientDir -Force | Out-Null
 
+if (Test-Path dist\logs) {
+  Remove-Item -LiteralPath dist\logs -Recurse -Force
+}
 New-Item -ItemType Directory -Path dist\logs -Force | Out-Null
 
 Write-Host "Build completed: $Root\dist\IronMail.exe"
