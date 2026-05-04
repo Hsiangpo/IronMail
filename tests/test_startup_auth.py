@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from ironmail import cli, config_manager
-from ironmail.main import ensure_license_code, run_send_flow, verify_before_console
+from ironmail.main import clean_terminal_input, ensure_license_code, run_send_flow, verify_before_console
 
 
 def test_ensure_license_code_prompts_when_missing(monkeypatch, capsys):
@@ -41,6 +41,14 @@ def test_ensure_license_code_keeps_existing_code(monkeypatch):
     ensure_license_code(config)
 
     assert config["license"]["code"] == "IM-EXISTING"
+
+
+def test_clean_terminal_input_removes_powershell_pipeline_nuls():
+    assert clean_terminal_input("0\x00\r\x00\n\x00") == "0"
+
+
+def test_clean_terminal_input_removes_powershell_pipeline_bom():
+    assert clean_terminal_input("ďť\udcbf0") == "0"
 
 
 def test_run_send_flow_does_not_verify_license_again(tmp_path, monkeypatch):

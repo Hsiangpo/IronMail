@@ -27,26 +27,33 @@ def configure_terminal_encoding() -> None:
     if not sys.platform.startswith("win"):
         return
     set_windows_console_utf8()
-    reconfigure_standard_streams("utf-8")
+    reconfigure_standard_streams("utf-8", terminal_only=True)
 
 
 def set_windows_console_utf8() -> bool:
     """把Windows控制台输入/输出代码页切到UTF-8。"""
     try:
         import ctypes
+        from ctypes import wintypes
     except Exception:
         return False
 
     kernel32 = ctypes.windll.kernel32
+    kernel32.SetConsoleOutputCP.argtypes = [wintypes.UINT]
+    kernel32.SetConsoleOutputCP.restype = wintypes.BOOL
+    kernel32.SetConsoleCP.argtypes = [wintypes.UINT]
+    kernel32.SetConsoleCP.restype = wintypes.BOOL
     output_ok = bool(kernel32.SetConsoleOutputCP(65001))
     input_ok = bool(kernel32.SetConsoleCP(65001))
     return output_ok and input_ok
 
 
-def reconfigure_standard_streams(encoding: str) -> None:
+def reconfigure_standard_streams(encoding: str, terminal_only: bool = False) -> None:
     """重配Python标准流编码；不支持reconfigure的流直接跳过。"""
     for stream_name in ("stdin", "stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
+        if terminal_only and not is_stream_terminal(stream):
+            continue
         reconfigure = getattr(stream, "reconfigure", None)
         if not callable(reconfigure):
             continue
@@ -54,6 +61,17 @@ def reconfigure_standard_streams(encoding: str) -> None:
             reconfigure(encoding=encoding, errors="replace")
         except Exception:
             continue
+
+
+def is_stream_terminal(stream: Any) -> bool:
+    """判断单个标准流是否连接到真实终端。"""
+    isatty = getattr(stream, "isatty", None)
+    if not callable(isatty):
+        return False
+    try:
+        return bool(isatty())
+    except Exception:
+        return False
 
 
 def run_console(
@@ -952,6 +970,32 @@ def clear_windows_console() -> bool:
         ]
 
     kernel32 = ctypes.windll.kernel32
+    kernel32.GetStdHandle.argtypes = [wintypes.DWORD]
+    kernel32.GetStdHandle.restype = wintypes.HANDLE
+    kernel32.GetConsoleScreenBufferInfo.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(CONSOLE_SCREEN_BUFFER_INFO),
+    ]
+    kernel32.GetConsoleScreenBufferInfo.restype = wintypes.BOOL
+    kernel32.FillConsoleOutputCharacterW.argtypes = [
+        wintypes.HANDLE,
+        wintypes.WCHAR,
+        wintypes.DWORD,
+        COORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    kernel32.FillConsoleOutputCharacterW.restype = wintypes.BOOL
+    kernel32.FillConsoleOutputAttribute.argtypes = [
+        wintypes.HANDLE,
+        wintypes.WORD,
+        wintypes.DWORD,
+        COORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    kernel32.FillConsoleOutputAttribute.restype = wintypes.BOOL
+    kernel32.SetConsoleCursorPosition.argtypes = [wintypes.HANDLE, COORD]
+    kernel32.SetConsoleCursorPosition.restype = wintypes.BOOL
+
     stdout_handle = kernel32.GetStdHandle(-11)
     if stdout_handle in (0, -1):
         return False

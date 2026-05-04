@@ -510,7 +510,7 @@ def verify_before_console(config_path: Path) -> bool:
         if verify_license(config):
             config_manager.save_config(config_path, config)
             return True
-        retry = input("授权验证未通过。输入 Y 重新输入授权码，或直接回车退出: ").strip().upper()
+        retry = clean_terminal_input(input("授权验证未通过。输入 Y 重新输入授权码，或直接回车退出: ")).upper()
         if retry != "Y":
             return False
         config["license"]["code"] = ""
@@ -527,11 +527,20 @@ def ensure_license_code(config: dict) -> None:
         return
     cli.clear_screen(input, print, force=True)
     print_license_entry_panel(config)
-    code = input("授权码（输入0退出）: ").strip()
+    code = clean_terminal_input(input("授权码（输入0退出）: "))
     if code == "0":
         return
     if code:
         license_config["code"] = code
+
+
+def clean_terminal_input(value: str) -> str:
+    """清理管道输入里可能出现的BOM和NUL字符。"""
+    cleaned = value.replace("\x00", "").replace("\ufeff", "").replace("ï»¿", "")
+    return "".join(
+        char for char in cleaned.strip()
+        if char.isascii() and (char.isalnum() or char in "-_")
+    )
 
 
 def print_license_entry_panel(config: dict) -> None:

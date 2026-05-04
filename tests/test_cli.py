@@ -422,6 +422,9 @@ def test_configure_terminal_encoding_sets_utf8_on_windows(monkeypatch):
         def __init__(self):
             self.calls = []
 
+        def isatty(self):
+            return True
+
         def reconfigure(self, **kwargs):
             self.calls.append(kwargs)
 
@@ -441,6 +444,33 @@ def test_configure_terminal_encoding_sets_utf8_on_windows(monkeypatch):
     assert stdin.calls == [{"encoding": "utf-8", "errors": "replace"}]
     assert stdout.calls == [{"encoding": "utf-8", "errors": "replace"}]
     assert stderr.calls == [{"encoding": "utf-8", "errors": "replace"}]
+
+
+def test_configure_terminal_encoding_leaves_piped_streams_alone(monkeypatch):
+    class Stream:
+        def __init__(self):
+            self.calls = []
+
+        def isatty(self):
+            return False
+
+        def reconfigure(self, **kwargs):
+            self.calls.append(kwargs)
+
+    stdin = Stream()
+    stdout = Stream()
+    stderr = Stream()
+    monkeypatch.setattr("ironmail.cli.sys.platform", "win32")
+    monkeypatch.setattr("ironmail.cli.set_windows_console_utf8", lambda: True)
+    monkeypatch.setattr("ironmail.cli.sys.stdin", stdin)
+    monkeypatch.setattr("ironmail.cli.sys.stdout", stdout)
+    monkeypatch.setattr("ironmail.cli.sys.stderr", stderr)
+
+    cli.configure_terminal_encoding()
+
+    assert stdin.calls == []
+    assert stdout.calls == []
+    assert stderr.calls == []
 
 
 def test_console_does_not_pause_when_stdin_is_piped(monkeypatch):
