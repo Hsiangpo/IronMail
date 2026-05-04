@@ -62,11 +62,8 @@ if ($LASTEXITCODE -ne 0) {
 
 New-Item -ItemType Directory -Path dist\config -Force | Out-Null
 $DistConfigPath = "dist\config\config.yaml"
-if (Test-Path $DistConfigPath) {
-  Write-Host "Keeping existing runtime config: $Root\$DistConfigPath"
-} else {
-  Copy-Item config\config.yaml $DistConfigPath -Force
-}
+Copy-Item config\config.example.yaml $DistConfigPath -Force
+Write-Host "Wrote sanitized runtime config: $Root\$DistConfigPath"
 if (Test-Path dist\Mails) {
   Remove-Item -LiteralPath dist\Mails -Recurse -Force
 }
@@ -96,4 +93,4 @@ if (Test-Path dist\logs) {
 New-Item -ItemType Directory -Path dist\logs -Force | Out-Null
 
 Write-Host "Build completed: $Root\dist\IronMail.exe"
-Write-Host "Before running, check sender settings in dist\config\config.yaml."
+Write-Host "Before running, fill sender settings in dist\config\config.yaml."
