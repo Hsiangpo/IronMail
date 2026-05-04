@@ -158,26 +158,130 @@ def _page(title: str, body: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{escape(title)} - IronMail</title>
   <style>
-    body {{ margin: 0; font-family: Arial, sans-serif; background: #f5f7fb; color: #172033; }}
-    header {{ background: #172033; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; }}
-    main {{ max-width: 1120px; margin: 24px auto; padding: 0 16px; }}
-    section, table {{ background: #fff; border: 1px solid #d9e1ee; border-radius: 8px; }}
-    section {{ padding: 18px; margin-bottom: 18px; }}
-    table {{ width: 100%; border-collapse: collapse; overflow: hidden; }}
-    th, td {{ padding: 10px; border-bottom: 1px solid #e8edf5; text-align: left; vertical-align: top; }}
-    th {{ background: #eef3fa; }}
-    input, select {{ padding: 8px; border: 1px solid #c8d2e1; border-radius: 6px; min-width: 160px; }}
-    button {{ padding: 8px 12px; border: 0; border-radius: 6px; background: #1f6feb; color: #fff; cursor: pointer; }}
-    .danger {{ background: #c62828; }}
-    .muted {{ color: #627084; font-size: 13px; }}
-    .code {{ background: #eaf7ed; border: 1px solid #abd7b5; padding: 12px; border-radius: 6px; font-weight: bold; }}
-    .error {{ background: #ffecec; color: #9f1d1d; padding: 10px; border-radius: 6px; }}
-    .actions form {{ display: inline-block; margin: 2px; }}
+    :root {{
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --line: #dbe4f0;
+      --line-strong: #c9d6e6;
+      --text: #111827;
+      --muted: #64748b;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --danger: #dc2626;
+      --danger-dark: #b91c1c;
+      --success-bg: #ecfdf3;
+      --success-text: #166534;
+      --warning-bg: #fff7ed;
+      --warning-text: #9a3412;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }}
+    header {{
+      background: #111827;
+      color: #fff;
+      padding: 18px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }}
+    header strong {{ font-size: 17px; letter-spacing: 0; }}
+    header span {{ color: #cbd5e1; font-size: 13px; }}
+    main.dashboard-shell {{ max-width: 1180px; margin: 28px auto 48px; padding: 0 20px; }}
+    .page-title {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }}
+    .page-title h1 {{ margin: 0; font-size: 28px; letter-spacing: 0; }}
+    .page-title p {{ margin: 8px 0 0; color: var(--muted); }}
+    .panel {{
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+    }}
+    .panel-pad {{ padding: 22px; }}
+    .stack {{ display: grid; gap: 18px; }}
+    .stat-grid {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }}
+    .stat-card {{ padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }}
+    .stat-label {{ color: var(--muted); font-size: 13px; }}
+    .stat-value {{ margin-top: 8px; font-size: 26px; font-weight: 700; }}
+    .toolbar {{ display: flex; justify-content: space-between; align-items: center; gap: 16px; }}
+    .toolbar h2 {{ margin: 0; font-size: 20px; }}
+    .create-form {{ display: grid; grid-template-columns: minmax(220px, 1fr) 190px auto; gap: 12px; align-items: end; }}
+    label {{ display: grid; gap: 6px; color: #334155; font-weight: 600; font-size: 13px; }}
+    input, select {{
+      display: block;
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      min-width: 0;
+    }}
+    input:focus, select:focus {{ outline: 2px solid rgba(37, 99, 235, 0.18); border-color: var(--primary); }}
+    button {{
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 7px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }}
+    button:hover {{ background: var(--primary-dark); }}
+    .button-secondary {{ background: #475569; }}
+    .button-secondary:hover {{ background: #334155; }}
+    .danger {{ background: var(--danger); }}
+    .danger:hover {{ background: var(--danger-dark); }}
+    .muted {{ color: var(--muted); font-size: 13px; }}
+    .code {{
+      background: var(--success-bg);
+      border: 1px solid #bbf7d0;
+      color: #14532d;
+      padding: 14px 16px;
+      border-radius: 7px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      overflow-x: auto;
+    }}
+    .error {{ background: #fef2f2; color: #991b1b; padding: 12px; border-radius: 7px; border: 1px solid #fecaca; }}
+    .table-shell {{ overflow-x: auto; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }}
+    table {{ width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1180px; }}
+    th, td {{ padding: 14px 12px; border-bottom: 1px solid #e8eef6; text-align: left; vertical-align: middle; }}
+    th {{ background: #f1f5f9; color: #334155; font-size: 13px; font-weight: 800; }}
+    tbody tr:hover {{ background: var(--surface-soft); }}
+    tbody tr:last-child td {{ border-bottom: 0; }}
+    .prefix {{ font-weight: 800; color: #1e293b; }}
+    .status-badge {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 800; }}
+    .status-active {{ background: var(--success-bg); color: var(--success-text); }}
+    .status-disabled {{ background: var(--warning-bg); color: var(--warning-text); }}
+    .status-badge + select {{ margin-top: 8px; }}
+    .device-text {{ max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .actions {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+    .actions form {{ margin: 0; }}
+    .empty-state {{ padding: 28px; color: var(--muted); text-align: center; }}
+    .login-shell {{ max-width: 420px; margin: 70px auto; padding: 0 20px; }}
+    .login-shell h1 {{ margin-top: 0; }}
+    @media (max-width: 780px) {{
+      header {{ padding: 16px 18px; }}
+      main.dashboard-shell {{ margin-top: 20px; padding: 0 14px; }}
+      .page-title, .toolbar {{ display: grid; }}
+      .stat-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .create-form {{ grid-template-columns: 1fr; }}
+    }}
   </style>
 </head>
 <body>
-  <header><strong>IronMail 授权管理</strong><span>tmpmail.oldiron.us</span></header>
-  <main>{body}</main>
+  <header><strong>IronMail 授权管理</strong><span>管理后台</span></header>
+  {body}
 </body>
 </html>"""
 
@@ -186,15 +290,20 @@ def _login_form(error: str) -> str:
     """渲染登录表单。"""
     error_html = f'<p class="error">{escape(error)}</p>' if error else ""
     return f"""
-<section>
-  <h1>管理员登录</h1>
-  {error_html}
-  <form method="post" action="/admin/login">
-    <p><label>账号<br><input name="username" autocomplete="username"></label></p>
-    <p><label>密码<br><input name="password" type="password" autocomplete="current-password"></label></p>
-    <button type="submit">登录</button>
-  </form>
-</section>"""
+<main class="login-shell">
+  <section class="panel panel-pad stack">
+    <div>
+      <h1>管理员登录</h1>
+      <p class="muted">登录后可以创建、停用、解绑和删除授权码。</p>
+    </div>
+    {error_html}
+    <form class="stack" method="post" action="/admin/login">
+      <label>账号<input name="username" autocomplete="username"></label>
+      <label>密码<input name="password" type="password" autocomplete="current-password"></label>
+      <button type="submit">登录</button>
+    </form>
+  </section>
+</main>"""
 
 
 def _admin_body(licenses: list[dict[str, Any]], created_code: str | None) -> str:
@@ -202,41 +311,78 @@ def _admin_body(licenses: list[dict[str, Any]], created_code: str | None) -> str
     created_html = ""
     if created_code:
         created_html = f"""
-<section>
+<section class="panel panel-pad">
   <h2>新授权码</h2>
   <p class="muted">授权码只显示这一次，请保存到客户配置里。</p>
   <div class="code">{escape(created_code)}</div>
 </section>"""
 
     return f"""
-{created_html}
-<section>
-  <form method="post" action="/admin/logout" style="float:right"><button type="submit">退出登录</button></form>
-  <h1>授权码管理</h1>
-  <form method="post" action="/admin/licenses/create">
-    <label>备注 <input name="note" placeholder="客户或用途"></label>
-    <label>到期日 <input name="expires_at" type="date"></label>
-    <button type="submit">新增授权码</button>
-  </form>
-</section>
-{_license_table(licenses)}"""
+<main class="dashboard-shell stack">
+  <div class="page-title">
+    <div>
+      <h1>授权码管理</h1>
+      <p>集中管理客户端授权码、设备绑定和到期状态。</p>
+    </div>
+    <form method="post" action="/admin/logout"><button class="button-secondary" type="submit">退出登录</button></form>
+  </div>
+  {created_html}
+  {_license_stats(licenses)}
+  <section class="panel panel-pad stack">
+    <div class="toolbar">
+      <div>
+        <h2>新增授权码</h2>
+        <p class="muted">新授权码只会显示一次，创建后请立即保存。</p>
+      </div>
+    </div>
+    <form class="create-form" method="post" action="/admin/licenses/create">
+      <label>备注<input name="note" placeholder="客户或用途"></label>
+      <label>到期日<input name="expires_at" type="date"></label>
+      <div><button type="submit">新增授权码</button></div>
+    </form>
+  </section>
+  <section class="panel panel-pad stack">
+    <div class="toolbar">
+      <h2>授权列表</h2>
+      <span class="muted">共 {len(licenses)} 条</span>
+    </div>
+    {_license_table(licenses)}
+  </section>
+</main>"""
+
+
+def _license_stats(licenses: list[dict[str, Any]]) -> str:
+    """渲染授权码概览。"""
+    total = len(licenses)
+    active = sum(1 for item in licenses if item.get("status") == "active")
+    disabled = sum(1 for item in licenses if item.get("status") == "disabled")
+    bound = sum(1 for item in licenses if item.get("bound_device_id"))
+    return f"""
+  <section class="stat-grid" aria-label="状态总览">
+    <div class="stat-card"><div class="stat-label">全部授权</div><div class="stat-value">{total}</div></div>
+    <div class="stat-card"><div class="stat-label">启用中</div><div class="stat-value">{active}</div></div>
+    <div class="stat-card"><div class="stat-label">已禁用</div><div class="stat-value">{disabled}</div></div>
+    <div class="stat-card"><div class="stat-label">已绑定设备</div><div class="stat-value">{bound}</div></div>
+  </section>"""
 
 
 def _license_table(licenses: list[dict[str, Any]]) -> str:
     """渲染授权码表格。"""
     rows = "\n".join(_license_row(item) for item in licenses)
     if not rows:
-        rows = '<tr><td colspan="9" class="muted">暂无授权码</td></tr>'
+        rows = '<tr><td colspan="9" class="empty-state">暂无授权码，请先新增一个授权码。</td></tr>'
     return f"""
-<table>
-  <thead>
-    <tr>
-      <th>ID</th><th>授权码前缀</th><th>备注</th><th>状态</th><th>到期日</th>
-      <th>绑定设备</th><th>最后验证</th><th>版本</th><th>操作</th>
-    </tr>
-  </thead>
-  <tbody>{rows}</tbody>
-</table>"""
+<div class="table-shell">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>授权码前缀</th><th>完整授权码</th><th>备注</th><th>状态</th><th>到期日</th>
+        <th>绑定设备</th><th>最后验证</th><th>版本</th><th>操作</th>
+      </tr>
+    </thead>
+    <tbody>{rows}</tbody>
+  </table>
+</div>"""
 
 
 def _license_row(item: dict[str, Any]) -> str:
@@ -248,25 +394,38 @@ def _license_row(item: dict[str, Any]) -> str:
     app_version = item.get("last_app_version") or "-"
     status = item.get("status") or "active"
     status_options = _status_options(status)
+    update_form_id = f"license-update-{license_id}"
+    code_plain = item.get("code_plain") or "历史授权码未保存明文"
     return f"""
 <tr>
   <td>{license_id}</td>
-  <td>{escape(item.get("code_prefix") or "")}</td>
-  <td><form method="post" action="/admin/licenses/{license_id}/update">
-    <input name="note" value="{escape(item.get("note") or "")}">
+  <td class="prefix">{escape(item.get("code_prefix") or "")}</td>
+  <td class="prefix">{escape(code_plain)}</td>
+  <td>
+    <form id="{update_form_id}" method="post" action="/admin/licenses/{license_id}/update"></form>
+    <input form="{update_form_id}" name="note" value="{escape(item.get("note") or "")}">
   </td>
-  <td><select name="status">{status_options}</select></td>
-  <td><input name="expires_at" type="date" value="{escape(expires_at)}"></td>
-  <td><span class="muted">{escape(bound_device[:18])}</span></td>
+  <td>
+    {_status_badge(status)}
+    <select form="{update_form_id}" name="status">{status_options}</select>
+  </td>
+  <td><input form="{update_form_id}" name="expires_at" type="date" value="{escape(expires_at)}"></td>
+  <td><span class="muted device-text">{escape(bound_device)}</span></td>
   <td>{escape(last_seen)}</td>
   <td>{escape(app_version)}</td>
   <td class="actions">
-      <button type="submit">保存</button>
-    </form>
-    <form method="post" action="/admin/licenses/{license_id}/unbind"><button type="submit">解绑</button></form>
+    <button form="{update_form_id}" type="submit">保存</button>
+    <form method="post" action="/admin/licenses/{license_id}/unbind"><button class="button-secondary" type="submit">解绑</button></form>
     <form method="post" action="/admin/licenses/{license_id}/delete"><button class="danger" type="submit">删除</button></form>
   </td>
 </tr>"""
+
+
+def _status_badge(status: str) -> str:
+    """渲染状态标签。"""
+    if status == "disabled":
+        return '<span class="status-badge status-disabled">禁用</span>'
+    return '<span class="status-badge status-active">启用</span>'
 
 
 def _status_options(current: str) -> str:

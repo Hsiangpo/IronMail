@@ -28,6 +28,7 @@ def init_db(database_path: Path) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 code_hash TEXT NOT NULL UNIQUE,
                 code_prefix TEXT NOT NULL,
+                code_plain TEXT,
                 note TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'active',
                 expires_at TEXT,
@@ -40,6 +41,7 @@ def init_db(database_path: Path) -> None:
             )
             """
         )
+        ensure_column(conn, "licenses", "code_plain", "TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_licenses_status ON licenses(status)")
 
 
@@ -85,13 +87,28 @@ def create_license(conn: sqlite3.Connection, note: str, expires_at: str | None) 
     conn.execute(
         """
         INSERT INTO licenses (
-            code_hash, code_prefix, note, status, expires_at, created_at, updated_at
+            code_hash, code_prefix, code_plain, note, status, expires_at, created_at, updated_at
         )
-        VALUES (?, ?, ?, 'active', ?, ?, ?)
+        VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
         """,
-        (hash_code(code), code[:10], note.strip(), normalize_expires_at(expires_at), timestamp, timestamp),
+        (
+            hash_code(code),
+            code[:10],
+            code,
+            note.strip(),
+            normalize_expires_at(expires_at),
+            timestamp,
+            timestamp,
+        ),
     )
     return code
+
+
+def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    """确保旧数据库存在新字段。"""
+    columns = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def update_license(

@@ -66,13 +66,44 @@ def test_license_rejects_disabled_and_expired(tmp_path):
     assert expired["reason"] == "expired"
 
 
-def test_license_code_is_not_stored_in_plaintext(tmp_path):
+def test_license_code_is_available_for_admin_display(tmp_path):
     database_path = tmp_path / "licenses.sqlite3"
     db.init_db(database_path)
 
     with db.connect(database_path) as conn:
         code = db.create_license(conn, "测试客户", None)
-        row = conn.execute("SELECT code_hash, code_prefix FROM licenses").fetchone()
+        row = conn.execute("SELECT code_hash, code_prefix, code_plain FROM licenses").fetchone()
 
     assert row["code_hash"] != code
     assert row["code_prefix"] == code[:10]
+    assert row["code_plain"] == code
+
+
+def test_init_db_migrates_old_database_for_plain_code_display(tmp_path):
+    database_path = tmp_path / "licenses.sqlite3"
+    with db.connect(database_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE licenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code_hash TEXT NOT NULL UNIQUE,
+                code_prefix TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                expires_at TEXT,
+                bound_device_id TEXT,
+                bound_at TEXT,
+                last_seen_at TEXT,
+                last_app_version TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+    db.init_db(database_path)
+
+    with db.connect(database_path) as conn:
+        columns = [row["name"] for row in conn.execute("PRAGMA table_info(licenses)").fetchall()]
+
+    assert "code_plain" in columns

@@ -53,3 +53,23 @@ def test_admin_requires_login_and_can_create_license(tmp_path, monkeypatch):
     )
     assert created.status_code == 302
     assert "created=IM-" in created.headers["location"]
+
+
+def test_admin_license_page_uses_polished_layout(tmp_path, monkeypatch):
+    app_module = load_app(tmp_path, monkeypatch)
+    with app_module.db.connect(app_module.settings.database_path) as conn:
+        code = app_module.db.create_license(conn, "页面测试", None)
+    client = TestClient(app_module.app)
+    client.post("/admin/login", data={"username": "admin", "password": "secret"})
+
+    response = client.get("/admin/licenses")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "dashboard-shell" in html
+    assert "stat-grid" in html
+    assert "table-shell" in html
+    assert "状态总览" in html
+    assert "页面测试" in html
+    assert code in html
+    assert "完整授权码" in html
