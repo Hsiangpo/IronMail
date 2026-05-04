@@ -94,8 +94,8 @@ def test_sender_menu_adds_gmx_sender_with_provider_smtp(tmp_path, monkeypatch):
     assert "提示：显示名称会出现在邮件发件人位置" in joined
     assert "步骤 3/4: 填写邮箱密码" in joined
     assert "提示：Gmail 填16位应用专用密码" in joined
-    assert "步骤 4/4: 确认SMTP配置" in joined
-    assert "提示：Gmail 和 GMX 可直接回车自动识别" in joined
+    assert "步骤 4/4: SMTP设置" in joined
+    assert "提示：一般直接回车即可" in joined
 
 
 def test_sender_menu_does_not_save_when_smtp_test_fails(tmp_path, monkeypatch):
@@ -157,8 +157,8 @@ def test_read_smtp_fields_mentions_auto_provider_default():
 
     cli.read_smtp_fields(lambda prompt="": prompts.append(prompt) or "", output.append, email="sender@gmx.com")
 
-    assert any("回车自动识别" in prompt for prompt in prompts)
-    assert any("mail.gmx.com:465" in line for line in output)
+    assert any("直接回车使用默认设置" in prompt for prompt in prompts)
+    assert any("已识别为 GMX 邮箱" in line for line in output)
 
 
 def test_sender_menu_tests_all_smtp_accounts(tmp_path, monkeypatch):
@@ -315,7 +315,36 @@ def test_smtp_setup_guide_mentions_gmail_app_password():
     assert "GMX填写说明" in joined
     assert "https://myaccount.google.com/apppasswords" in joined
     assert "16位应用专用密码" in joined
-    assert "mail.gmx.com:465 SSL" in joined
+    assert "系统会使用默认SMTP设置" in joined
+    assert "；" not in joined
+    assert "SSL" not in joined
+    assert "STARTTLS" not in joined
+
+
+def test_add_sender_smtp_guidance_stays_plain_and_compact(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_config(config_path)
+    inputs = make_input([
+        "sender@gmx.com",
+        "GMX销售",
+        "smtp-password",
+        "",
+    ])
+    output = []
+    monkeypatch.setattr("ironmail.cli.mailer.test_smtp_login", lambda smtp, sender: True)
+
+    cli.add_sender_interactive(config_path, config_manager.load_config(config_path), inputs, output.append)
+
+    joined = "\n".join(output)
+    assert "步骤 4/4: SMTP设置" in joined
+    assert "提示：一般直接回车即可" in joined
+    assert "已识别为 GMX 邮箱" in joined
+    assert "直接回车会使用默认SMTP设置" in joined
+    assert "正在验证SMTP登录" in joined
+    assert "；" not in joined
+    assert "SSL" not in joined
+    assert "STARTTLS" not in joined
+    assert "发信服务" not in joined
 
 
 def test_smtp_failure_hint_explains_app_password_and_network():
@@ -439,9 +468,9 @@ def test_config_menu_updates_default_smtp(tmp_path):
     assert any("默认SMTP已保存" in line for line in output)
     joined = "\n".join(output)
     assert "步骤 1/3: 填写SMTP服务器" in joined
-    assert "提示：这是没有专属SMTP的邮箱会使用的全局默认SMTP" in joined
+    assert "提示：这是邮箱服务商给出的SMTP服务器地址" in joined
     assert "步骤 2/3: 填写SMTP端口" in joined
-    assert "步骤 3/3: 选择SSL开关" in joined
+    assert "步骤 3/3: 选择安全连接" in joined
 
 
 def test_config_menu_can_clear_license(tmp_path):

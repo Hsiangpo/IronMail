@@ -106,7 +106,7 @@ def manage_senders(config_path: Path, input_func: InputFunc, print_func: PrintFu
         clear_screen(input_func, print_func)
         print_header("发件邮箱管理", print_func)
         print_func("说明: 支持 Gmail、GMX、Google Workspace 和其他标准 SMTP 邮箱。")
-        print_func("提示: Gmail 需要应用专用密码；GMX 请使用邮箱的SMTP密码或应用密码。")
+        print_func("提示: Gmail 需要应用专用密码。GMX 请使用邮箱的SMTP密码或应用密码。")
         print_menu(
             [
                 ("1", "查看发件邮箱"),
@@ -183,20 +183,20 @@ def add_sender_interactive(
     if is_back_command(email):
         print_returned(print_func)
         return
-    print_step(2, 4, "填写显示名称", "显示名称会出现在邮件发件人位置；直接回车时使用邮箱地址。", print_func)
+    print_step(2, 4, "填写显示名称", "显示名称会出现在邮件发件人位置。直接回车时使用邮箱地址。", print_func)
     name = input_func("显示名称，直接回车则使用邮箱地址，输入0返回上一层: ").strip()
     if is_back_command(name):
         print_returned(print_func)
         return
-    print_step(3, 4, "填写邮箱密码", "Gmail 填16位应用专用密码；GMX 填可用于SMTP的密码或应用密码。", print_func)
-    password = read_password("应用专用密码/SMTP密码，输入0返回上一层: ", input_func)
+    print_step(3, 4, "填写邮箱密码", "Gmail 填16位应用专用密码。GMX 填可用于SMTP的密码或应用密码。", print_func)
+    password = read_password("邮箱SMTP密码，输入0返回上一层: ", input_func)
     if is_back_command(password):
         print_returned(print_func)
         return
     if not password:
         print_func("保存失败: 密码不能为空。Gmail 请填写16位应用专用密码，不是网页登录密码。")
         return
-    print_step(4, 4, "确认SMTP配置", "Gmail 和 GMX 可直接回车自动识别；其他邮箱请按服务商后台填写SMTP。", print_func)
+    print_step(4, 4, "SMTP设置", "一般直接回车即可。只有服务商给了单独的SMTP信息时，才需要手动填写。", print_func)
     smtp_fields = read_smtp_fields(input_func, print_func, email=email)
     if smtp_fields is None:
         return
@@ -226,23 +226,23 @@ def edit_sender_interactive(
     print_func: PrintFunc,
 ) -> None:
     """交互式修改发件邮箱"""
-    print_step(1, 4, "选择要修改的邮箱", "输入列表里的邮箱序号；输入0返回上一层。", print_func)
+    print_step(1, 4, "选择要修改的邮箱", "输入列表里的邮箱序号。输入0返回上一层。", print_func)
     sender = pick_sender(config, input_func, print_func)
     if not sender:
         return
     print_smtp_setup_guide(print_func)
     print_func("直接回车表示保留原值，输入0返回上一层。")
-    print_step(2, 4, "修改显示名称", "直接回车保留原显示名称；输入0返回上一层。", print_func)
+    print_step(2, 4, "修改显示名称", "直接回车保留原显示名称。输入0返回上一层。", print_func)
     name = input_func(f"显示名称 [{sender.get('name') or '-'}]: ").strip()
     if is_back_command(name):
         print_returned(print_func)
         return
-    print_step(3, 4, "修改邮箱密码", "直接回车保留原密码；输入新密码会覆盖旧密码。", print_func)
+    print_step(3, 4, "修改邮箱密码", "直接回车保留原密码。输入新密码会覆盖旧密码。", print_func)
     password = read_password("新密码，直接回车保留原密码，输入0返回上一层: ", input_func)
     if is_back_command(password):
         print_returned(print_func)
         return
-    print_step(4, 4, "修改SMTP配置", "直接回车使用当前邮箱域名对应的默认SMTP；手动填写会保存为该邮箱专属SMTP。", print_func)
+    print_step(4, 4, "修改SMTP设置", "直接回车使用默认设置。手动填写会保存为该邮箱专属SMTP设置。", print_func)
     smtp_fields = read_smtp_fields(input_func, print_func, sender, sender.get("email", ""))
     if smtp_fields is None:
         return
@@ -269,11 +269,11 @@ def delete_sender_interactive(
     print_func: PrintFunc,
 ) -> None:
     """交互式删除发件邮箱"""
-    print_step(1, 2, "选择要删除的邮箱", "输入列表里的邮箱序号；输入0返回上一层。", print_func)
+    print_step(1, 2, "选择要删除的邮箱", "输入列表里的邮箱序号。输入0返回上一层。", print_func)
     sender = pick_sender(config, input_func, print_func)
     if not sender:
         return
-    print_step(2, 2, "确认删除", "删除后该邮箱不会再参与轮询发件；需要输入 DELETE 才会真正删除。", print_func)
+    print_step(2, 2, "确认删除", "删除后该邮箱不会再参与轮询发件。需要输入 DELETE 才会真正删除。", print_func)
     confirm = input_func(f"确认删除 {sender['email']}？输入 DELETE 确认，输入0返回上一层: ").strip()
     if is_back_command(confirm):
         print_returned(print_func)
@@ -439,11 +439,11 @@ def open_template_interactive(template_dir: Path, input_func: InputFunc, print_f
 
 def delete_template_interactive(template_dir: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
     """选择并删除邮件模板。"""
-    print_step(1, 2, "选择要删除的模板", "输入模板序号；输入0返回上一层。", print_func)
+    print_step(1, 2, "选择要删除的模板", "输入模板序号。输入0返回上一层。", print_func)
     template_path = pick_template(template_dir, input_func, print_func)
     if not template_path:
         return
-    print_step(2, 2, "确认删除", "删除后模板文件会从磁盘移除；需要输入 DELETE 才会真正删除。", print_func)
+    print_step(2, 2, "确认删除", "删除后模板文件会从磁盘移除。需要输入 DELETE 才会真正删除。", print_func)
     confirm = input_func(f"确认删除 {template_path.name}？输入 DELETE 确认，输入0返回上一层: ").strip()
     if is_back_command(confirm):
         print_returned(print_func)
@@ -494,7 +494,7 @@ def validate_sender_login_before_save(
     if test_one_sender(config, sender, print_func):
         print_func("SMTP登录测试通过，正在保存发件邮箱。")
         return True
-    print_func("保存失败: SMTP登录测试未通过，请检查邮箱、应用专用密码和SMTP配置。")
+    print_func("保存失败: SMTP登录测试未通过，请检查邮箱、SMTP密码和SMTP设置。")
     return False
 
 
@@ -536,9 +536,10 @@ def read_smtp_fields(
     default_host = current_smtp.get("host") or provider_smtp["host"]
     default_port = int(current_smtp.get("port") or provider_smtp["port"])
     default_ssl = bool(current_smtp.get("use_ssl", provider_smtp["use_ssl"]))
-    print_func(f"SMTP配置: 直接回车自动识别为 {default_host}:{default_port} SSL={'开启' if default_ssl else '关闭'}")
-    print_func("Gmail、GMX 等常见邮箱会自动带出SMTP；其他邮箱请按服务商后台手动填写。")
-    host = input_func(f"SMTP服务器 [{current_smtp.get('host') or '回车自动识别'}]，输入0返回上一层: ").strip()
+    provider_name = smtp_provider_label(default_host)
+    print_func(f"已识别为 {provider_name} 邮箱。")
+    print_func("直接回车会使用默认SMTP设置。")
+    host = input_func("SMTP服务器 [直接回车使用默认设置]，输入0返回上一层: ").strip()
     if is_back_command(host):
         print_returned(print_func)
         return None
@@ -546,6 +547,7 @@ def read_smtp_fields(
         if provider_smtp == config_manager.DEFAULT_SMTP:
             return "", default_port, default_ssl
         return default_host, default_port, default_ssl
+    print_step(4, 4, "填写SMTP端口", "不知道就保持默认。服务商有特殊要求时再改。", print_func)
     port_raw = input_func(f"SMTP端口 [{default_port}]: ").strip()
     try:
         port = int(port_raw or default_port)
@@ -553,9 +555,20 @@ def read_smtp_fields(
         print_func("SMTP端口必须是数字，本次使用默认端口 465。")
         port = 465
     default_ssl_label = "Y" if default_ssl else "N"
-    ssl_raw = input_func(f"是否使用SSL？Y/N [{default_ssl_label}]: ").strip().upper()
+    print_step(4, 4, "选择安全连接", "不知道就保持默认。大多数邮箱都可以这样用。", print_func)
+    ssl_raw = input_func(f"是否开启安全连接？Y/N [{default_ssl_label}]: ").strip().upper()
     use_ssl = default_ssl if not ssl_raw else ssl_raw != "N"
     return host, port, use_ssl
+
+
+def smtp_provider_label(host: str) -> str:
+    """根据SMTP服务器返回面向用户的邮箱服务商名称。"""
+    lowered = host.lower()
+    if "gmx" in lowered:
+        return "GMX"
+    if "gmail" in lowered:
+        return "Gmail"
+    return "当前"
 
 
 def read_password(prompt: str, input_func: InputFunc) -> str:
@@ -614,18 +627,18 @@ def manage_default_smtp(config_path: Path, input_func: InputFunc, print_func: Pr
     smtp = config.get("smtp", {})
     print_header("修改默认SMTP", print_func)
     print_func("直接回车表示保留原值，输入0返回上一层。")
-    print_step(1, 3, "填写SMTP服务器", "这是没有专属SMTP的邮箱会使用的全局默认SMTP。", print_func)
+    print_step(1, 3, "填写SMTP服务器", "这是邮箱服务商给出的SMTP服务器地址。", print_func)
     host = input_func(f"SMTP服务器 [{smtp.get('host') or 'smtp.gmail.com'}]: ").strip()
     if is_back_command(host):
         print_returned(print_func)
         return
-    print_step(2, 3, "填写SMTP端口", "常见SSL端口是465；STARTTLS常见端口是587。", print_func)
+    print_step(2, 3, "填写SMTP端口", "不知道就保持默认。服务商有特殊要求时再改。", print_func)
     port_raw = input_func(f"SMTP端口 [{smtp.get('port') or 465}]: ").strip()
     if is_back_command(port_raw):
         print_returned(print_func)
         return
-    print_step(3, 3, "选择SSL开关", "端口465通常选择Y；端口587通常选择N并由程序启用STARTTLS。", print_func)
-    ssl_raw = input_func(f"是否使用SSL？Y/N [{'Y' if smtp.get('use_ssl', True) else 'N'}]: ").strip().upper()
+    print_step(3, 3, "选择安全连接", "不知道就保持默认。大多数邮箱都可以这样用。", print_func)
+    ssl_raw = input_func(f"是否开启安全连接？Y/N [{'Y' if smtp.get('use_ssl', True) else 'N'}]: ").strip().upper()
     if is_back_command(ssl_raw):
         print_returned(print_func)
         return
@@ -647,17 +660,17 @@ def manage_smtp_proxy(config_path: Path, input_func: InputFunc, print_func: Prin
     proxy = config.get("smtp_proxy", {})
     print_header("修改SMTP出网", print_func)
     print_func("模式说明: auto=先直连失败再试代理，direct=只直连，proxy=只走代理。")
-    print_step(1, 3, "选择出网模式", "auto会先直连，失败后尝试本机代理；不同电脑网络不同，默认推荐auto。", print_func)
+    print_step(1, 3, "选择出网模式", "自动模式会先直连，失败后尝试本机代理。不同电脑网络不同，默认推荐自动模式。", print_func)
     mode = input_func(f"出网模式 auto/direct/proxy [{proxy.get('mode') or 'auto'}]: ").strip().lower()
     if is_back_command(mode):
         print_returned(print_func)
         return
-    print_step(2, 3, "填写代理地址", "本机代理一般是127.0.0.1；没有代理也可以保持默认。", print_func)
+    print_step(2, 3, "填写代理地址", "本机代理一般是127.0.0.1。没有代理也可以保持默认。", print_func)
     host = input_func(f"代理地址 [{proxy.get('host') or '127.0.0.1'}]: ").strip()
     if is_back_command(host):
         print_returned(print_func)
         return
-    print_step(3, 3, "填写主代理端口", "常见端口是7897、7890、1080；程序还会尝试候选端口。", print_func)
+    print_step(3, 3, "填写主代理端口", "常见端口是7897、7890、1080。程序还会尝试候选端口。", print_func)
     port_raw = input_func(f"主代理端口 [{proxy.get('port') or 7897}]: ").strip()
     if is_back_command(port_raw):
         print_returned(print_func)
@@ -680,7 +693,7 @@ def clear_license_interactive(config_path: Path, input_func: InputFunc, print_fu
     current = config.get("license", {}).get("code") or "未填写"
     print_header("删除授权码", print_func)
     print_func(f"当前授权码: {current}")
-    print_step(1, 1, "确认清空授权码", "清空后下次启动需要重新输入授权码；需要输入 DELETE 才会真正清空。", print_func)
+    print_step(1, 1, "确认清空授权码", "清空后下次启动需要重新输入授权码。需要输入 DELETE 才会真正清空。", print_func)
     confirm = input_func("确认清空授权码？输入 DELETE 确认，输入0返回上一层: ").strip()
     if is_back_command(confirm):
         print_returned(print_func)
@@ -732,7 +745,7 @@ def manage_license(config_path: Path, input_func: InputFunc, print_func: PrintFu
     current = config.get("license", {}).get("code") or "未填写"
     print_header("设置授权码", print_func)
     print_func(f"当前授权码: {current}")
-    print_step(1, 1, "填写授权码", "填写管理员提供的完整授权码；直接回车表示不修改。", print_func)
+    print_step(1, 1, "填写授权码", "填写管理员提供的完整授权码。直接回车表示不修改。", print_func)
     code = input_func("请输入新的授权码，直接回车则不修改，输入0返回上一层: ").strip()
     if is_back_command(code):
         print_returned(print_func)
@@ -749,7 +762,7 @@ def show_config_summary(config: dict[str, Any], print_func: PrintFunc) -> None:
     settings = config.get("settings", {})
     license_code = config.get("license", {}).get("code") or "未填写"
     print_header("当前配置", print_func)
-    print_func(f"默认SMTP: {smtp.get('host')}:{smtp.get('port')} SSL={'开启' if smtp.get('use_ssl') else '关闭'}")
+    print_func(f"默认SMTP: {smtp.get('host')}:{smtp.get('port')} 安全连接={'开启' if smtp.get('use_ssl') else '关闭'}")
     print_func(f"授权码: {license_code}")
     print_func(f"每个邮箱发送封数: {settings.get('emails_per_account')}")
     print_func(f"发送间隔: {settings.get('delay_seconds')} 秒")
@@ -812,13 +825,13 @@ def print_smtp_setup_guide(print_func: PrintFunc) -> None:
     print_func("- 邮箱地址: 填 Gmail 邮箱，例如 yourname@gmail.com")
     print_func("- 密码: 填 Google 生成的16位应用专用密码，不是网页登录密码")
     print_func("- 准备步骤: 先开启 Google 两步验证，再访问 https://myaccount.google.com/apppasswords 生成应用专用密码")
-    print_func("- SMTP服务器: 直接回车，系统会自动使用 smtp.gmail.com:465 SSL")
+    print_func("- SMTP设置: 直接回车，系统会使用默认SMTP设置")
     print_func("")
     print_func("GMX填写说明:")
     print_func("- 邮箱地址: 填 GMX 邮箱，例如 yourname@gmx.com")
     print_func("- 密码: 填 GMX 可用于SMTP的密码或应用密码")
-    print_func("- SMTP服务器: 直接回车，系统会自动使用 mail.gmx.com:465 SSL")
-    print_func("- 端口说明: 465 是 SSL；587 是 STARTTLS，默认先用 465")
+    print_func("- SMTP设置: 直接回车，系统会使用默认SMTP设置")
+    print_func("- 手动配置: 只有服务商要求时才需要填写")
     print_func("")
 
 
@@ -853,10 +866,10 @@ def smtp_failure_hint(error: Exception) -> str:
             "仍失败时请确认网络能访问对应SMTP服务器，例如 smtp.gmail.com 或 mail.gmx.com。"
         )
     if "certificate" in text or "ssl" in text:
-        return "排查建议: SSL连接失败，请确认SMTP端口为465且SSL开启。"
+        return "排查建议: 安全连接失败，请确认邮箱服务商给出的SMTP服务器和端口是否正确。"
     return (
-        "排查建议: 请先确认邮箱地址、SMTP密码、SMTP服务器和端口是否正确；"
-        "Gmail默认是 smtp.gmail.com:465 SSL，GMX默认是 mail.gmx.com:465 SSL。"
+        "排查建议: 请先确认邮箱地址、SMTP密码、SMTP服务器和端口是否正确。"
+        "Gmail 和 GMX 通常可以直接回车使用默认设置。"
     )
 
 

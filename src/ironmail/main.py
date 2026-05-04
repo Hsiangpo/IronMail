@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -77,6 +78,24 @@ def log_message(log_file: str, message: str):
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
     with open(log_file, 'a', encoding='utf-8') as f:
         f.write(log_entry)
+
+
+def format_send_error(error: Exception) -> str:
+    """把常见发信错误转成更容易判断的中文提示。"""
+    raw = str(error)
+    text = raw.lower()
+    if "policy restrictions" in text and "postmaster.gmx.net" in text:
+        ip = extract_gmx_policy_ip(raw)
+        if ip:
+            return f"GMX拒绝本次发信，当前出网IP {ip} 触发风控。建议换网络或改用其他发件邮箱。"
+        return "GMX拒绝本次发信，可能是账号、内容、频率或收件人触发风控。建议降低频率后再试。"
+    return raw
+
+
+def extract_gmx_policy_ip(message: str) -> str:
+    """从GMX错误链接里提取被拦截的出网IP。"""
+    match = re.search(r"[?&]v=([0-9a-fA-F:.]+)", message)
+    return match.group(1) if match else ""
 
 
 def check_sensitive_words(text: str) -> Tuple[bool, str]:
@@ -494,12 +513,13 @@ def run_send_flow(app_dir: Path, config_path: Path):
                 log_message(log_file, f"[{index+1}/{total}] 成功 -> {recipient_email} (发件人: {current_sender['email']})")
                 break
             except Exception as e:
+                error_text = format_send_error(e)
                 if attempt < settings['max_retries'] - 1:
-                    log_message(log_file, f"[{index+1}/{total}] 重试 {attempt+1} -> {recipient_email}: {str(e)}")
+                    log_message(log_file, f"[{index+1}/{total}] 重试 {attempt+1} -> {recipient_email}: {error_text}")
                     time.sleep(2)
                 else:
                     fail_count += 1
-                    log_message(log_file, f"[{index+1}/{total}] 失败 -> {recipient_email}: {str(e)}")
+                    log_message(log_file, f"[{index+1}/{total}] 失败 -> {recipient_email}: {error_text}")
 
         # 发送间隔
         if index < total - 1:

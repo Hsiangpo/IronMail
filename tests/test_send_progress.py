@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from ironmail import send_progress
-from ironmail.main import run_send_flow
+from ironmail.main import format_send_error, run_send_flow
 
 
 def test_progress_file_depends_on_table_and_template(tmp_path):
@@ -37,6 +37,19 @@ def test_mark_completed_and_reload(tmp_path):
 
 def test_row_key_uses_excel_row_number_and_email():
     assert send_progress.row_key(0, "buyer@example.com") == "2|buyer@example.com"
+
+
+def test_format_send_error_explains_gmx_ip_policy_block():
+    error = Exception(
+        "(554, b'Transaction failed\\nReject due to policy restrictions.\\n"
+        "For explanation visit https://postmaster.gmx.net/en/case?c=hi&i=ip&v=112.46.217.48&r=abc')"
+    )
+
+    message = format_send_error(error)
+
+    assert "GMX拒绝本次发信" in message
+    assert "当前出网IP 112.46.217.48 触发风控" in message
+    assert "postmaster.gmx.net" not in message
 
 
 def test_progress_summary_counts_completed_rows(tmp_path):
