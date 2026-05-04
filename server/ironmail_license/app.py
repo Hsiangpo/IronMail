@@ -86,9 +86,11 @@ def admin_licenses(request: Request) -> HTMLResponse:
     redirect = _require_admin(request)
     if redirect:
         return redirect
+    query = str(request.query_params.get("q") or "").strip()
     with db.connect(settings.database_path) as conn:
         licenses = db.list_licenses(conn)
-    body = _admin_body(licenses, request.query_params.get("created"))
+    filtered_licenses = _filter_licenses(licenses, query)
+    body = _admin_body(licenses, filtered_licenses, request.query_params.get("created"), query)
     return HTMLResponse(_page("授权码管理", body))
 
 
@@ -213,6 +215,10 @@ def _page(title: str, body: str) -> str:
     .stat-value {{ margin-top: 8px; font-size: 26px; font-weight: 700; }}
     .toolbar {{ display: flex; justify-content: space-between; align-items: center; gap: 16px; }}
     .toolbar h2 {{ margin: 0; font-size: 20px; }}
+    .list-tools {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
+    .search-form {{ display: grid; grid-template-columns: minmax(280px, 380px) auto auto; gap: 10px; align-items: center; }}
+    .text-link {{ color: var(--primary); font-weight: 700; text-decoration: none; white-space: nowrap; }}
+    .text-link:hover {{ color: var(--primary-dark); text-decoration: underline; }}
     .create-form {{ display: grid; grid-template-columns: minmax(220px, 1fr) 190px auto; gap: 12px; align-items: end; }}
     label {{ display: grid; gap: 6px; color: #334155; font-weight: 600; font-size: 13px; }}
     input, select {{
@@ -293,7 +299,7 @@ def _page(title: str, body: str) -> str:
       main.dashboard-shell {{ width: calc(100% - 28px); margin-top: 20px; }}
       .page-title, .toolbar {{ display: grid; }}
       .stat-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-      .create-form {{ grid-template-columns: 1fr; }}
+      .create-form, .search-form {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -349,7 +355,12 @@ def _login_form(error: str) -> str:
 </main>"""
 
 
-def _admin_body(licenses: list[dict[str, Any]], created_code: str | None) -> str:
+def _admin_body(
+    licenses: list[dict[str, Any]],
+    filtered_licenses: list[dict[str, Any]],
+    created_code: str | None,
+    query: str,
+) -> str:
     """渲染授权码管理页。"""
     created_html = ""
     if created_code:
@@ -386,12 +397,51 @@ def _admin_body(licenses: list[dict[str, Any]], created_code: str | None) -> str
   </section>
   <section class="panel panel-pad stack">
     <div class="toolbar">
-      <h2>授权列表</h2>
-      <span class="muted">共 {len(licenses)} 条</span>
+      <div>
+        <h2>授权列表</h2>
+        <p class="muted">{_license_count_text(len(filtered_licenses), len(licenses), query)}</p>
+      </div>
+      <div class="list-tools">{_license_search_form(query)}</div>
     </div>
-    {_license_table(licenses)}
+    {_license_table(filtered_licenses, query)}
   </section>
 </main>"""
+
+
+def _filter_licenses(licenses: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    """按授权码和备注模糊过滤。"""
+    normalized = query.lower()
+    if not normalized:
+        return licenses
+    return [item for item in licenses if _license_matches_query(item, normalized)]
+
+
+def _license_matches_query(item: dict[str, Any], normalized_query: str) -> bool:
+    """判断授权码是否匹配搜索词。"""
+    fields = [
+        item.get("code_plain") or "",
+        item.get("code_prefix") or "",
+        item.get("note") or "",
+    ]
+    return any(normalized_query in str(field).lower() for field in fields)
+
+
+def _license_count_text(filtered_count: int, total_count: int, query: str) -> str:
+    """渲染授权码数量文案。"""
+    if query:
+        return f"搜索结果 {filtered_count} 条 / 全部 {total_count} 条"
+    return f"共 {total_count} 条"
+
+
+def _license_search_form(query: str) -> str:
+    """渲染授权码搜索表单。"""
+    reset_link = '<a class="text-link" href="/admin/licenses">清除</a>' if query else ""
+    return f"""
+      <form class="search-form" method="get" action="/admin/licenses">
+        <input name="q" value="{escape(query)}" placeholder="按授权码或备注搜索">
+        <button type="submit">搜索</button>
+        {reset_link}
+      </form>"""
 
 
 def _license_stats(licenses: list[dict[str, Any]]) -> str:
@@ -409,29 +459,28 @@ def _license_stats(licenses: list[dict[str, Any]]) -> str:
   </section>"""
 
 
-def _license_table(licenses: list[dict[str, Any]]) -> str:
+def _license_table(licenses: list[dict[str, Any]], query: str) -> str:
     """渲染授权码表格。"""
     rows = "\n".join(_license_row(item) for item in licenses)
     if not rows:
-        rows = '<tr><td colspan="9" class="empty-state">暂无授权码，请先新增一个授权码。</td></tr>'
+        empty_text = "没有找到匹配的授权码，请换个关键词再试。" if query else "暂无授权码，请先新增一个授权码。"
+        rows = f'<tr><td colspan="7" class="empty-state">{empty_text}</td></tr>'
     return f"""
 <div class="table-shell">
   <table>
     <colgroup>
-      <col style="width: 52px">
-      <col style="width: 220px">
-      <col style="width: 120px">
-      <col style="width: 150px">
+      <col style="width: 240px">
       <col style="width: 170px">
-      <col>
-      <col style="width: 220px">
-      <col style="width: 76px">
+      <col style="width: 150px">
+      <col style="width: 150px">
+      <col style="width: auto">
+      <col style="width: 190px">
       <col style="width: 220px">
     </colgroup>
     <thead>
       <tr>
-        <th>ID</th><th>完整授权码</th><th>备注</th><th>状态</th><th>到期日</th>
-        <th>绑定设备</th><th>最后验证</th><th>版本</th><th>操作</th>
+        <th>完整授权码</th><th>备注</th><th>状态</th><th>到期日</th>
+        <th>绑定设备</th><th>最后验证</th><th>操作</th>
       </tr>
     </thead>
     <tbody>{rows}</tbody>
@@ -445,14 +494,12 @@ def _license_row(item: dict[str, Any]) -> str:
     expires_at = item.get("expires_at") or ""
     bound_device = item.get("bound_device_id") or "未绑定"
     last_seen = item.get("last_seen_at") or "-"
-    app_version = item.get("last_app_version") or "-"
     status = item.get("status") or "active"
     status_options = _status_options(status)
     update_form_id = f"license-update-{license_id}"
     code_plain = item.get("code_plain") or "历史授权码未保存明文"
     return f"""
 <tr>
-  <td>{license_id}</td>
   <td>{_detail_value("完整授权码", code_plain, 20)}</td>
   <td>
     <form id="{update_form_id}" method="post" action="/admin/licenses/{license_id}/update"></form>
@@ -465,7 +512,6 @@ def _license_row(item: dict[str, Any]) -> str:
   <td><input form="{update_form_id}" name="expires_at" type="date" value="{escape(expires_at)}"></td>
   <td>{_detail_value("绑定设备", bound_device, 26)}</td>
   <td>{_detail_value("最后验证", last_seen, 20)}</td>
-  <td>{escape(app_version)}</td>
   <td class="actions">
     <button form="{update_form_id}" type="submit">保存</button>
     <form method="post" action="/admin/licenses/{license_id}/unbind"><button class="button-secondary" type="submit">解绑</button></form>

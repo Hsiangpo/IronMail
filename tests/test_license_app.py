@@ -74,7 +74,33 @@ def test_admin_license_page_uses_polished_layout(tmp_path, monkeypatch):
     assert "状态总览" in html
     assert "页面测试" in html
     assert "授权码前缀" not in html
+    assert "<th>ID</th>" not in html
+    assert "<th>版本</th>" not in html
     assert "完整授权码" in html
     assert "查看完整授权码" in html
     assert "detail-modal" in html
     assert "openDetailModal" in html
+
+
+def test_admin_license_page_can_search_by_code_and_note(tmp_path, monkeypatch):
+    app_module = load_app(tmp_path, monkeypatch)
+    with app_module.db.connect(app_module.settings.database_path) as conn:
+        first_code = app_module.db.create_license(conn, "德国客户 Alpha", None)
+        app_module.db.create_license(conn, "法国客户 Beta", None)
+    client = TestClient(app_module.app)
+    client.post("/admin/login", data={"username": "admin", "password": "secret"})
+
+    note_response = client.get("/admin/licenses?q=Alpha")
+    code_response = client.get(f"/admin/licenses?q={first_code[3:9]}")
+
+    assert note_response.status_code == 200
+    note_html = note_response.text
+    assert "按授权码或备注搜索" in note_html
+    assert "搜索" in note_html
+    assert "德国客户 Alpha" in note_html
+    assert "法国客户 Beta" not in note_html
+
+    assert code_response.status_code == 200
+    code_html = code_response.text
+    assert "德国客户 Alpha" in code_html
+    assert "法国客户 Beta" not in code_html
