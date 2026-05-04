@@ -178,14 +178,17 @@ def add_sender_interactive(
     """交互式新增发件邮箱"""
     print_header("新增发件邮箱", print_func)
     print_smtp_setup_guide(print_func)
+    print_step(1, 4, "填写邮箱地址", "填写要用于发件的完整邮箱地址，例如 yourname@gmail.com 或 yourname@gmx.com。", print_func)
     email = input_func("邮箱地址，输入0返回上一层: ").strip()
     if is_back_command(email):
         print_returned(print_func)
         return
+    print_step(2, 4, "填写显示名称", "显示名称会出现在邮件发件人位置；直接回车时使用邮箱地址。", print_func)
     name = input_func("显示名称，直接回车则使用邮箱地址，输入0返回上一层: ").strip()
     if is_back_command(name):
         print_returned(print_func)
         return
+    print_step(3, 4, "填写邮箱密码", "Gmail 填16位应用专用密码；GMX 填可用于SMTP的密码或应用密码。", print_func)
     password = read_password("应用专用密码/SMTP密码，输入0返回上一层: ", input_func)
     if is_back_command(password):
         print_returned(print_func)
@@ -193,6 +196,7 @@ def add_sender_interactive(
     if not password:
         print_func("保存失败: 密码不能为空。Gmail 请填写16位应用专用密码，不是网页登录密码。")
         return
+    print_step(4, 4, "确认SMTP配置", "Gmail 和 GMX 可直接回车自动识别；其他邮箱请按服务商后台填写SMTP。", print_func)
     smtp_fields = read_smtp_fields(input_func, print_func, email=email)
     if smtp_fields is None:
         return
@@ -222,19 +226,23 @@ def edit_sender_interactive(
     print_func: PrintFunc,
 ) -> None:
     """交互式修改发件邮箱"""
+    print_step(1, 4, "选择要修改的邮箱", "输入列表里的邮箱序号；输入0返回上一层。", print_func)
     sender = pick_sender(config, input_func, print_func)
     if not sender:
         return
     print_smtp_setup_guide(print_func)
     print_func("直接回车表示保留原值，输入0返回上一层。")
+    print_step(2, 4, "修改显示名称", "直接回车保留原显示名称；输入0返回上一层。", print_func)
     name = input_func(f"显示名称 [{sender.get('name') or '-'}]: ").strip()
     if is_back_command(name):
         print_returned(print_func)
         return
+    print_step(3, 4, "修改邮箱密码", "直接回车保留原密码；输入新密码会覆盖旧密码。", print_func)
     password = read_password("新密码，直接回车保留原密码，输入0返回上一层: ", input_func)
     if is_back_command(password):
         print_returned(print_func)
         return
+    print_step(4, 4, "修改SMTP配置", "直接回车使用当前邮箱域名对应的默认SMTP；手动填写会保存为该邮箱专属SMTP。", print_func)
     smtp_fields = read_smtp_fields(input_func, print_func, sender, sender.get("email", ""))
     if smtp_fields is None:
         return
@@ -261,9 +269,11 @@ def delete_sender_interactive(
     print_func: PrintFunc,
 ) -> None:
     """交互式删除发件邮箱"""
+    print_step(1, 2, "选择要删除的邮箱", "输入列表里的邮箱序号；输入0返回上一层。", print_func)
     sender = pick_sender(config, input_func, print_func)
     if not sender:
         return
+    print_step(2, 2, "确认删除", "删除后该邮箱不会再参与轮询发件；需要输入 DELETE 才会真正删除。", print_func)
     confirm = input_func(f"确认删除 {sender['email']}？输入 DELETE 确认，输入0返回上一层: ").strip()
     if is_back_command(confirm):
         print_returned(print_func)
@@ -278,6 +288,7 @@ def delete_sender_interactive(
 
 def test_sender_interactive(config: dict[str, Any], input_func: InputFunc, print_func: PrintFunc) -> None:
     """交互式测试SMTP账号"""
+    print_step(1, 1, "选择要测试的邮箱", "只测试登录SMTP，不会发送邮件。", print_func)
     sender = pick_sender(config, input_func, print_func)
     if not sender:
         return
@@ -401,6 +412,7 @@ def list_templates(template_dir: Path, print_func: PrintFunc) -> list[Path]:
 
 def create_template_interactive(template_dir: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
     """交互式新增邮件模板。"""
+    print_step(1, 1, "填写模板名称", "系统会自动创建 .md 模板文件，并写入“邮件主题：”和“邮件正文：”。", print_func)
     name = input_func("模板名称，输入0返回上一层: ").strip()
     if is_back_command(name):
         print_returned(print_func)
@@ -417,6 +429,7 @@ def create_template_interactive(template_dir: Path, input_func: InputFunc, print
 
 def open_template_interactive(template_dir: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
     """选择并打开邮件模板。"""
+    print_step(1, 1, "选择要打开的模板", "输入模板序号后，系统会用默认编辑器打开文件。", print_func)
     template_path = pick_template(template_dir, input_func, print_func)
     if not template_path:
         return
@@ -426,9 +439,11 @@ def open_template_interactive(template_dir: Path, input_func: InputFunc, print_f
 
 def delete_template_interactive(template_dir: Path, input_func: InputFunc, print_func: PrintFunc) -> None:
     """选择并删除邮件模板。"""
+    print_step(1, 2, "选择要删除的模板", "输入模板序号；输入0返回上一层。", print_func)
     template_path = pick_template(template_dir, input_func, print_func)
     if not template_path:
         return
+    print_step(2, 2, "确认删除", "删除后模板文件会从磁盘移除；需要输入 DELETE 才会真正删除。", print_func)
     confirm = input_func(f"确认删除 {template_path.name}？输入 DELETE 确认，输入0返回上一层: ").strip()
     if is_back_command(confirm):
         print_returned(print_func)
@@ -599,14 +614,17 @@ def manage_default_smtp(config_path: Path, input_func: InputFunc, print_func: Pr
     smtp = config.get("smtp", {})
     print_header("修改默认SMTP", print_func)
     print_func("直接回车表示保留原值，输入0返回上一层。")
+    print_step(1, 3, "填写SMTP服务器", "这是没有专属SMTP的邮箱会使用的全局默认SMTP。", print_func)
     host = input_func(f"SMTP服务器 [{smtp.get('host') or 'smtp.gmail.com'}]: ").strip()
     if is_back_command(host):
         print_returned(print_func)
         return
+    print_step(2, 3, "填写SMTP端口", "常见SSL端口是465；STARTTLS常见端口是587。", print_func)
     port_raw = input_func(f"SMTP端口 [{smtp.get('port') or 465}]: ").strip()
     if is_back_command(port_raw):
         print_returned(print_func)
         return
+    print_step(3, 3, "选择SSL开关", "端口465通常选择Y；端口587通常选择N并由程序启用STARTTLS。", print_func)
     ssl_raw = input_func(f"是否使用SSL？Y/N [{'Y' if smtp.get('use_ssl', True) else 'N'}]: ").strip().upper()
     if is_back_command(ssl_raw):
         print_returned(print_func)
@@ -629,14 +647,17 @@ def manage_smtp_proxy(config_path: Path, input_func: InputFunc, print_func: Prin
     proxy = config.get("smtp_proxy", {})
     print_header("修改SMTP出网", print_func)
     print_func("模式说明: auto=先直连失败再试代理，direct=只直连，proxy=只走代理。")
+    print_step(1, 3, "选择出网模式", "auto会先直连，失败后尝试本机代理；不同电脑网络不同，默认推荐auto。", print_func)
     mode = input_func(f"出网模式 auto/direct/proxy [{proxy.get('mode') or 'auto'}]: ").strip().lower()
     if is_back_command(mode):
         print_returned(print_func)
         return
+    print_step(2, 3, "填写代理地址", "本机代理一般是127.0.0.1；没有代理也可以保持默认。", print_func)
     host = input_func(f"代理地址 [{proxy.get('host') or '127.0.0.1'}]: ").strip()
     if is_back_command(host):
         print_returned(print_func)
         return
+    print_step(3, 3, "填写主代理端口", "常见端口是7897、7890、1080；程序还会尝试候选端口。", print_func)
     port_raw = input_func(f"主代理端口 [{proxy.get('port') or 7897}]: ").strip()
     if is_back_command(port_raw):
         print_returned(print_func)
@@ -659,6 +680,7 @@ def clear_license_interactive(config_path: Path, input_func: InputFunc, print_fu
     current = config.get("license", {}).get("code") or "未填写"
     print_header("删除授权码", print_func)
     print_func(f"当前授权码: {current}")
+    print_step(1, 1, "确认清空授权码", "清空后下次启动需要重新输入授权码；需要输入 DELETE 才会真正清空。", print_func)
     confirm = input_func("确认清空授权码？输入 DELETE 确认，输入0返回上一层: ").strip()
     if is_back_command(confirm):
         print_returned(print_func)
@@ -677,16 +699,19 @@ def manage_send_settings(config_path: Path, input_func: InputFunc, print_func: P
     settings = config["settings"]
     print_header("调整发送设置", print_func)
     print_func("直接回车表示保留原值，输入0返回上一层。")
+    print_step(1, 3, "设置轮换封数", "例如填1表示每发1封就切换下一个邮箱。", print_func)
     emails_per_account = input_func(
         f"每个邮箱连续发送几封后切换 [{settings.get('emails_per_account', 1)}]: "
     ).strip()
     if is_back_command(emails_per_account):
         print_returned(print_func)
         return
+    print_step(2, 3, "设置发送间隔", "每封邮件发送后等待多少秒再继续，数值越大越慢但更稳。", print_func)
     delay_seconds = input_func(f"每封邮件间隔秒数 [{settings.get('delay_seconds', 12)}]: ").strip()
     if is_back_command(delay_seconds):
         print_returned(print_func)
         return
+    print_step(3, 3, "设置失败重试次数", "单封邮件失败后最多重试几次，建议保持1到3。", print_func)
     max_retries = input_func(f"失败重试次数 [{settings.get('max_retries', 3)}]: ").strip()
     if is_back_command(max_retries):
         print_returned(print_func)
@@ -707,6 +732,7 @@ def manage_license(config_path: Path, input_func: InputFunc, print_func: PrintFu
     current = config.get("license", {}).get("code") or "未填写"
     print_header("设置授权码", print_func)
     print_func(f"当前授权码: {current}")
+    print_step(1, 1, "填写授权码", "填写管理员提供的完整授权码；直接回车表示不修改。", print_func)
     code = input_func("请输入新的授权码，直接回车则不修改，输入0返回上一层: ").strip()
     if is_back_command(code):
         print_returned(print_func)
@@ -743,6 +769,15 @@ def print_menu(items: list[tuple[str, str]], print_func: PrintFunc) -> None:
     print_func("")
     for key, label in items:
         print_func(f"  {key}. {label}")
+
+
+def print_step(index: int, total: int, title: str, hint: str, print_func: PrintFunc) -> None:
+    """打印分步输入标题。"""
+    print_func("")
+    print_func(f"步骤 {index}/{total}: {title}")
+    print_func("-" * 72)
+    print_func(f"提示：{hint}")
+    print_func("")
 
 
 def print_panel(title: str, lines: list[str], print_func: PrintFunc) -> None:

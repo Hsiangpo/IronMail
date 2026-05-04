@@ -87,6 +87,15 @@ def test_sender_menu_adds_gmx_sender_with_provider_smtp(tmp_path, monkeypatch):
     assert sender["email"] == "sender@gmx.com"
     assert sender["smtp"] == {"host": "mail.gmx.com", "port": 465, "use_ssl": True}
     assert tested == [("mail.gmx.com", 465, "sender@gmx.com")]
+    joined = "\n".join(output)
+    assert "步骤 1/4: 填写邮箱地址" in joined
+    assert "提示：填写要用于发件的完整邮箱地址" in joined
+    assert "步骤 2/4: 填写显示名称" in joined
+    assert "提示：显示名称会出现在邮件发件人位置" in joined
+    assert "步骤 3/4: 填写邮箱密码" in joined
+    assert "提示：Gmail 填16位应用专用密码" in joined
+    assert "步骤 4/4: 确认SMTP配置" in joined
+    assert "提示：Gmail 和 GMX 可直接回车自动识别" in joined
 
 
 def test_sender_menu_does_not_save_when_smtp_test_fails(tmp_path, monkeypatch):
@@ -229,6 +238,11 @@ def test_settings_menu_updates_rotation_without_yaml_editing(tmp_path):
     assert settings["emails_per_account"] == 3
     assert settings["delay_seconds"] == 5
     assert settings["max_retries"] == 2
+    joined = "\n".join(output)
+    assert "步骤 1/3: 设置轮换封数" in joined
+    assert "提示：例如填1表示每发1封就切换下一个邮箱" in joined
+    assert "步骤 2/3: 设置发送间隔" in joined
+    assert "步骤 3/3: 设置失败重试次数" in joined
 
 
 def test_license_menu_updates_code_without_yaml_editing(tmp_path):
@@ -362,15 +376,19 @@ def test_template_menu_creates_template_and_opens_file(tmp_path, monkeypatch):
     config_path = tmp_path / "config" / "config.yaml"
     write_config(config_path)
     opened = []
+    output = []
     inputs = make_input(["2", "德国邀请", "0"])
     monkeypatch.setattr("ironmail.cli.open_template_file", lambda path: opened.append(path))
 
-    cli.manage_templates(config_path, inputs, lambda line: None)
+    cli.manage_templates(config_path, inputs, output.append)
 
     template_path = tmp_path / "Mails" / "邮件模板" / "德国邀请.md"
     assert template_path.exists()
     assert template_path.read_text(encoding="utf-8") == "邮件主题：\n\n邮件正文：\n"
     assert opened == [template_path]
+    joined = "\n".join(output)
+    assert "步骤 1/1: 填写模板名称" in joined
+    assert "提示：系统会自动创建 .md 模板文件" in joined
 
 
 def test_template_menu_deletes_template_after_confirmation(tmp_path):
@@ -419,6 +437,11 @@ def test_config_menu_updates_default_smtp(tmp_path):
     config = config_manager.load_config(config_path)
     assert config["smtp"] == {"host": "mail.gmx.com", "port": 465, "use_ssl": True}
     assert any("默认SMTP已保存" in line for line in output)
+    joined = "\n".join(output)
+    assert "步骤 1/3: 填写SMTP服务器" in joined
+    assert "提示：这是没有专属SMTP的邮箱会使用的全局默认SMTP" in joined
+    assert "步骤 2/3: 填写SMTP端口" in joined
+    assert "步骤 3/3: 选择SSL开关" in joined
 
 
 def test_config_menu_can_clear_license(tmp_path):
