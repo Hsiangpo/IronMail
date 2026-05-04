@@ -45,6 +45,7 @@ COLORS = {
     "bg": "#f4f6f8",
     "surface": "#ffffff",
     "surface_alt": "#f8fafc",
+    "info": "#f6f8fb",
     "border": "#d7dde5",
     "text": "#172033",
     "muted": "#667085",
@@ -53,6 +54,18 @@ COLORS = {
     "danger": "#9b2f2f",
     "select": "#e8eef7",
 }
+
+SMTP_REFERENCE_LINES = [
+    "Gmail / Google Workspace：SMTP 服务器 smtp.gmail.com；SSL 用 465，STARTTLS 用 587；密码填写 Google 账号生成的 16 位应用专用密码，不是网页登录密码。",
+    "GMX：SMTP 服务器 mail.gmx.com；SSL/TLS 用 465，STARTTLS 用 587；密码填写 GMX 可用于 SMTP 的密码或应用密码。",
+    "其他邮箱：使用服务商后台提供的 SMTP 地址、端口和安全方式。465 通常勾选 SSL，587 通常关闭 SSL 走 STARTTLS。",
+]
+
+SETTINGS_REFERENCE_LINES = [
+    "默认 SMTP 只在发件邮箱未单独填写 SMTP 时使用；Gmail 默认是 smtp.gmail.com:465 SSL。",
+    "出网模式 auto 会先直连，失败后尝试本机 HTTP 代理；direct 只直连；proxy 只走代理。",
+    "发送间隔越大越稳但越慢；失败重试建议保持 1 到 3；每个邮箱连续发送数控制轮换频率。",
+]
 
 
 def run_app() -> int:
@@ -71,6 +84,23 @@ def run_app() -> int:
         except Exception:
             pass
         return 1
+
+
+def friendly_smtp_hint(error: Exception) -> str:
+    text = str(error).lower()
+    if any(mark in text for mark in ["535", "authentication", "password", "username"]):
+        return (
+            "排查建议：登录失败通常是邮箱密码类型不对。Gmail/Workspace 请使用 16 位应用专用密码，"
+            "并确认账号已开启两步验证；GMX 请确认 SMTP 密码可用。"
+        )
+    if any(mark in text for mark in ["timed out", "timeout", "10060", "network", "unreachable", "refused"]):
+        return (
+            "排查建议：网络到 SMTP 服务器不通或被拦截。可以检查代理设置，或确认当前网络能访问 "
+            "smtp.gmail.com / mail.gmx.com。"
+        )
+    if any(mark in text for mark in ["ssl", "tls", "certificate", "wrong version"]):
+        return "排查建议：安全连接配置不匹配。465 通常开启 SSL/TLS 直连，587 通常关闭 SSL 后走 STARTTLS。"
+    return "排查建议：请确认邮箱地址、SMTP 密码、SMTP 服务器、端口和安全连接方式是否匹配。"
 
 
 class IronMailApp(Tk):
@@ -111,11 +141,14 @@ class IronMailApp(Tk):
         style.configure("App.TFrame", background=COLORS["bg"])
         style.configure("Surface.TFrame", background=COLORS["surface"])
         style.configure("Toolbar.TFrame", background=COLORS["surface"])
+        style.configure("Info.TFrame", background=COLORS["info"])
         style.configure("TLabel", background=COLORS["surface"], foreground=COLORS["text"])
         style.configure("Header.TLabel", background=COLORS["bg"], foreground=COLORS["text"], font=(FONT_FAMILY, 18, "bold"))
         style.configure("Subheader.TLabel", background=COLORS["bg"], foreground=COLORS["muted"], font=(FONT_FAMILY, 10))
         style.configure("SurfaceTitle.TLabel", background=COLORS["surface"], foreground=COLORS["text"], font=(FONT_FAMILY, 12, "bold"))
         style.configure("Muted.TLabel", background=COLORS["surface"], foreground=COLORS["muted"])
+        style.configure("InfoTitle.TLabel", background=COLORS["info"], foreground=COLORS["text"], font=(FONT_FAMILY, 10, "bold"))
+        style.configure("InfoText.TLabel", background=COLORS["info"], foreground=COLORS["muted"], font=(FONT_FAMILY, 9))
         style.configure("TButton", padding=(11, 6), background=COLORS["surface_alt"], foreground=COLORS["text"], borderwidth=1)
         style.map("TButton", background=[("active", "#eef2f7")])
         style.configure("Primary.TButton", padding=(14, 7), background=COLORS["primary"], foreground="#ffffff", borderwidth=0)
@@ -557,7 +590,8 @@ class IronMailApp(Tk):
     # Senders tab
     def _build_senders_tab(self) -> None:
         self.senders_tab.columnconfigure(0, weight=1)
-        self.senders_tab.rowconfigure(0, weight=1)
+        self.senders_tab.rowconfigure(1, weight=1)
+        self.add_info_panel(self.senders_tab, "SMTP 配置参考", SMTP_REFERENCE_LINES, row=0)
         self.sender_tree = ttk.Treeview(
             self.senders_tab,
             columns=("name", "smtp"),
@@ -567,9 +601,9 @@ class IronMailApp(Tk):
         self.sender_tree.heading("#0", text="邮箱")
         self.sender_tree.heading("name", text="显示名称")
         self.sender_tree.heading("smtp", text="SMTP")
-        self.sender_tree.grid(row=0, column=0, sticky="nsew")
+        self.sender_tree.grid(row=1, column=0, sticky="nsew")
         buttons = ttk.Frame(self.senders_tab, style="Toolbar.TFrame")
-        buttons.grid(row=1, column=0, sticky="ew", pady=10)
+        buttons.grid(row=2, column=0, sticky="ew", pady=10)
         ttk.Button(buttons, text="新增", command=lambda: self.open_sender_dialog()).grid(row=0, column=0, padx=(0, 8))
         ttk.Button(buttons, text="修改", command=self.edit_selected_sender).grid(row=0, column=1, padx=(0, 8))
         ttk.Button(buttons, text="删除", command=self.delete_selected_sender).grid(row=0, column=2, padx=(0, 8))
@@ -636,7 +670,8 @@ class IronMailApp(Tk):
             mailer.test_smtp_login(smtp, sender)
             self._post(lambda: messagebox.showinfo("SMTP 测试成功", f"{sender['email']} 登录成功。"))
         except Exception as error:
-            self._post(lambda: messagebox.showerror("SMTP 测试失败", f"{sender['email']}\n\n{error}"))
+            hint = friendly_smtp_hint(error)
+            self._post(lambda: messagebox.showerror("SMTP 测试失败", f"{sender['email']}\n\n{error}\n\n{hint}"))
 
     # Recipients tab
     def _build_recipients_tab(self) -> None:
@@ -781,6 +816,7 @@ class IronMailApp(Tk):
     # Settings tab
     def _build_settings_tab(self) -> None:
         self.settings_tab.columnconfigure(1, weight=1)
+        self.add_info_panel(self.settings_tab, "配置说明", SETTINGS_REFERENCE_LINES, row=0, columnspan=2)
         labels = [
             ("授权码", "license_code"),
             ("默认SMTP服务器", "smtp_host"),
@@ -794,14 +830,19 @@ class IronMailApp(Tk):
         ]
         self.setting_vars: dict[str, StringVar] = {}
         for row, (label, key) in enumerate(labels):
-            ttk.Label(self.settings_tab, text=label).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 10))
+            form_row = row + 1
+            ttk.Label(self.settings_tab, text=label).grid(row=form_row, column=0, sticky="w", pady=5, padx=(0, 10))
             var = StringVar()
             self.setting_vars[key] = var
-            ttk.Entry(self.settings_tab, textvariable=var).grid(row=row, column=1, sticky="ew", pady=5)
+            ttk.Entry(self.settings_tab, textvariable=var).grid(row=form_row, column=1, sticky="ew", pady=5)
         self.smtp_ssl_var = BooleanVar(value=True)
-        ttk.Checkbutton(self.settings_tab, text="默认SMTP使用 SSL", variable=self.smtp_ssl_var).grid(row=len(labels), column=1, sticky="w", pady=5)
+        ttk.Checkbutton(
+            self.settings_tab,
+            text="默认 SMTP 使用 SSL/TLS 直连（465 常用；关闭后使用 STARTTLS，587 常用）",
+            variable=self.smtp_ssl_var,
+        ).grid(row=len(labels) + 1, column=1, sticky="w", pady=5)
         ttk.Button(self.settings_tab, text="保存配置", style="Primary.TButton", command=self.save_settings_from_form).grid(
-            row=len(labels) + 1, column=1, sticky="w", pady=12
+            row=len(labels) + 2, column=1, sticky="w", pady=12
         )
 
     def refresh_settings(self) -> None:
@@ -888,6 +929,31 @@ class IronMailApp(Tk):
         text.grid(row=0, column=0, sticky="nsew")
         text.insert("1.0", content)
 
+    def add_info_panel(
+        self,
+        parent: ttk.Frame,
+        title: str,
+        lines: list[str],
+        row: int,
+        column: int = 0,
+        columnspan: int = 1,
+        wraplength: int = 960,
+        pady: tuple[int, int] = (0, 12),
+    ) -> ttk.Frame:
+        panel = ttk.Frame(parent, padding=(12, 10), style="Info.TFrame", relief="solid", borderwidth=1)
+        panel.grid(row=row, column=column, columnspan=columnspan, sticky="ew", pady=pady)
+        panel.columnconfigure(0, weight=1)
+        ttk.Label(panel, text=title, style="InfoTitle.TLabel").grid(row=0, column=0, sticky="w")
+        for index, line in enumerate(lines, start=1):
+            ttk.Label(
+                panel,
+                text=line,
+                style="InfoText.TLabel",
+                wraplength=wraplength,
+                justify="left",
+            ).grid(row=index, column=0, sticky="w", pady=(4 if index == 1 else 2, 0))
+        return panel
+
     def configure_text_widget(self, widget: Text, monospace: bool = False) -> None:
         font = ("Consolas", 10) if monospace else (FONT_FAMILY, 10)
         widget.configure(
@@ -916,6 +982,7 @@ class SenderDialog(Toplevel):
         self.sender = sender
         self.title("发件邮箱")
         self.resizable(False, False)
+        self.configure(background=COLORS["surface"])
         self.email_var = StringVar(value=sender.get("email", "") if sender else "")
         self.name_var = StringVar(value=sender.get("name", "") if sender else "")
         self.password_var = StringVar(value=sender.get("password", "") if sender else "")
@@ -927,7 +994,7 @@ class SenderDialog(Toplevel):
         self.grab_set()
 
     def _build(self) -> None:
-        frame = ttk.Frame(self, padding=14)
+        frame = ttk.Frame(self, padding=16, style="Surface.TFrame")
         frame.grid(row=0, column=0, sticky="nsew")
         fields = [
             ("邮箱地址", self.email_var),
@@ -939,10 +1006,24 @@ class SenderDialog(Toplevel):
         for row, (label, var) in enumerate(fields):
             ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 10))
             show = "*" if "密码" in label else None
-            ttk.Entry(frame, textvariable=var, show=show, width=40).grid(row=row, column=1, sticky="ew", pady=5)
-        ttk.Checkbutton(frame, text="使用 SSL", variable=self.smtp_ssl_var).grid(row=len(fields), column=1, sticky="w", pady=5)
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=len(fields) + 1, column=1, sticky="e", pady=(12, 0))
+            ttk.Entry(frame, textvariable=var, show=show, width=56).grid(row=row, column=1, sticky="ew", pady=5)
+        ttk.Checkbutton(
+            frame,
+            text="使用 SSL/TLS 直连（465 常用；关闭后使用 STARTTLS，587 常用）",
+            variable=self.smtp_ssl_var,
+        ).grid(row=len(fields), column=1, sticky="w", pady=5)
+        self.app.add_info_panel(
+            frame,
+            "常用服务商参数",
+            SMTP_REFERENCE_LINES,
+            row=len(fields) + 1,
+            column=0,
+            columnspan=2,
+            wraplength=660,
+            pady=(10, 4),
+        )
+        buttons = ttk.Frame(frame, style="Toolbar.TFrame")
+        buttons.grid(row=len(fields) + 2, column=1, sticky="e", pady=(12, 0))
         ttk.Button(buttons, text="保存", command=self.save).grid(row=0, column=0, padx=(0, 8))
         ttk.Button(buttons, text="取消", command=self.destroy).grid(row=0, column=1)
 
