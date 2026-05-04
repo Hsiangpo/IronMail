@@ -556,26 +556,36 @@ class IronMailApp(Tk):
                 continue
             subject = str(row["邮件主题"]).strip()
             body = str(row["邮件正文"]).strip()
-            current_sender = mailer.choose_sender(senders, send_attempt_count, emails_per_account)
-            smtp_config = config_manager.resolve_sender_smtp(config, current_sender)
-            smtp_config["proxy"] = config.get("smtp_proxy", {})
-            send_attempt_count += 1
             sent = False
-            for attempt in range(int(settings.get("max_retries", 3))):
-                try:
-                    mailer.send_email(smtp_config, current_sender, recipient_email, subject, body)
-                    success_count += 1
-                    sent = True
-                    send_progress.mark_row_completed(progress_state, row_key, "success")
-                    self.gui_log(f"[{index + 1}/{len(df)}] 成功 -> {recipient_email}")
+            max_retries = int(settings.get("max_retries", 3))
+            candidates = mailer.sender_candidates(senders, send_attempt_count, emails_per_account)
+            for sender_offset, current_sender in enumerate(candidates):
+                smtp_config = config_manager.resolve_sender_smtp(config, current_sender)
+                smtp_config["proxy"] = config.get("smtp_proxy", {})
+                if sender_offset:
+                    self.gui_log(f"[{index + 1}/{len(df)}] 切换发件邮箱重试 -> {current_sender['email']}")
+                for attempt in range(max_retries):
+                    try:
+                        mailer.send_email(smtp_config, current_sender, recipient_email, subject, body)
+                        success_count += 1
+                        send_attempt_count += 1
+                        sent = True
+                        send_progress.mark_row_completed(progress_state, row_key, "success")
+                        self.gui_log(f"[{index + 1}/{len(df)}] 成功 -> {recipient_email} (发件人: {current_sender['email']})")
+                        break
+                    except Exception as error:
+                        error_text = format_send_error(error)
+                        if attempt < max_retries - 1:
+                            self.gui_log(f"[{index + 1}/{len(df)}] 重试 {attempt + 1} -> {recipient_email}: {error_text}")
+                        elif sender_offset < len(candidates) - 1:
+                            self.gui_log(
+                                f"[{index + 1}/{len(df)}] 发件邮箱 {current_sender['email']} 不可用，准备切换: {error_text}"
+                            )
+                        else:
+                            fail_count += 1
+                            self.gui_log(f"[{index + 1}/{len(df)}] 失败 -> {recipient_email}: {error_text}")
+                if sent:
                     break
-                except Exception as error:
-                    error_text = format_send_error(error)
-                    if attempt < int(settings.get("max_retries", 3)) - 1:
-                        self.gui_log(f"[{index + 1}/{len(df)}] 重试 {attempt + 1} -> {recipient_email}: {error_text}")
-                    else:
-                        fail_count += 1
-                        self.gui_log(f"[{index + 1}/{len(df)}] 失败 -> {recipient_email}: {error_text}")
             if not sent:
                 continue
             delay = int(settings.get("delay_seconds", 12))

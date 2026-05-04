@@ -18,6 +18,20 @@ def test_choose_sender_treats_bad_threshold_as_one():
     assert mailer.choose_sender(senders, sent_count=1, emails_per_account=0)["email"] == "b@example.com"
 
 
+def test_sender_candidates_start_from_current_rotation_position():
+    senders = [
+        {"email": "a@example.com"},
+        {"email": "b@example.com"},
+        {"email": "c@example.com"},
+    ]
+
+    assert [sender["email"] for sender in mailer.sender_candidates(senders, sent_count=1, emails_per_account=1)] == [
+        "b@example.com",
+        "c@example.com",
+        "a@example.com",
+    ]
+
+
 def test_build_message_uses_sender_display_name():
     message = mailer.build_message(
         sender={"email": "sales@oldiron.us", "name": "销售"},

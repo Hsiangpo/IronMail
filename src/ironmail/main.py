@@ -87,8 +87,8 @@ def format_send_error(error: Exception) -> str:
     if "policy restrictions" in text and "postmaster.gmx.net" in text:
         ip = extract_gmx_policy_ip(raw)
         if ip:
-            return f"GMX拒绝本次发信，当前出网IP {ip} 触发风控。建议换网络或改用其他发件邮箱。"
-        return "GMX拒绝本次发信，可能是账号、内容、频率或收件人触发风控。建议降低频率后再试。"
+            return f"GMX拒收本次发信：当前出网IP {ip} 被GMX策略限制。程序会尝试切换其他发件邮箱。"
+        return "GMX拒收本次发信：服务商返回策略限制。程序会尝试切换其他发件邮箱。"
     return raw
 
 
@@ -466,29 +466,38 @@ def run_send_flow(app_dir: Path, config_path: Path):
             send_progress.mark_row_completed(progress_state, row_key, "skipped_empty_email")
             continue
 
-        # 轮换选择发件邮箱
-        current_sender = mailer.choose_sender(senders, send_attempt_count, emails_per_account)
-        smtp_config = config_manager.resolve_sender_smtp(config, current_sender)
-        smtp_config["proxy"] = config.get("smtp_proxy", {})
-        send_attempt_count += 1
+        sent = False
+        max_retries = int(settings['max_retries'])
+        candidates = mailer.sender_candidates(senders, send_attempt_count, emails_per_account)
+        for sender_offset, current_sender in enumerate(candidates):
+            smtp_config = config_manager.resolve_sender_smtp(config, current_sender)
+            smtp_config["proxy"] = config.get("smtp_proxy", {})
+            if sender_offset:
+                log_message(log_file, f"[{index+1}/{total}] 切换发件邮箱重试 -> {current_sender['email']}")
 
-        # 发送邮件，支持重试
-        for attempt in range(settings['max_retries']):
-            try:
-                mailer.send_email(smtp_config, current_sender, recipient_email,
-                                  subject, body)
-                success_count += 1
-                send_progress.mark_row_completed(progress_state, row_key, "success")
-                log_message(log_file, f"[{index+1}/{total}] 成功 -> {recipient_email} (发件人: {current_sender['email']})")
+            # 发送邮件，支持重试；当前邮箱最终失败后再切换下一个邮箱。
+            for attempt in range(max_retries):
+                try:
+                    mailer.send_email(smtp_config, current_sender, recipient_email,
+                                      subject, body)
+                    success_count += 1
+                    send_attempt_count += 1
+                    sent = True
+                    send_progress.mark_row_completed(progress_state, row_key, "success")
+                    log_message(log_file, f"[{index+1}/{total}] 成功 -> {recipient_email} (发件人: {current_sender['email']})")
+                    break
+                except Exception as e:
+                    error_text = format_send_error(e)
+                    if attempt < max_retries - 1:
+                        log_message(log_file, f"[{index+1}/{total}] 重试 {attempt+1} -> {recipient_email}: {error_text}")
+                        time.sleep(2)
+                    elif sender_offset < len(candidates) - 1:
+                        log_message(log_file, f"[{index+1}/{total}] 发件邮箱 {current_sender['email']} 不可用，准备切换: {error_text}")
+                    else:
+                        fail_count += 1
+                        log_message(log_file, f"[{index+1}/{total}] 失败 -> {recipient_email}: {error_text}")
+            if sent:
                 break
-            except Exception as e:
-                error_text = format_send_error(e)
-                if attempt < settings['max_retries'] - 1:
-                    log_message(log_file, f"[{index+1}/{total}] 重试 {attempt+1} -> {recipient_email}: {error_text}")
-                    time.sleep(2)
-                else:
-                    fail_count += 1
-                    log_message(log_file, f"[{index+1}/{total}] 失败 -> {recipient_email}: {error_text}")
 
         # 发送间隔
         if index < total - 1:

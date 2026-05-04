@@ -30,9 +30,29 @@ def choose_sender(
     """按实际发送数量轮询选择发件邮箱"""
     if not senders:
         raise ValueError("未配置有效的发件邮箱")
+    return senders[choose_sender_index(senders, sent_count, emails_per_account)]
+
+
+def choose_sender_index(
+    senders: list[dict[str, Any]],
+    sent_count: int,
+    emails_per_account: int,
+) -> int:
+    """返回当前轮换策略选中的发件邮箱下标。"""
+    if not senders:
+        raise ValueError("未配置有效的发件邮箱")
     threshold = max(1, int(emails_per_account or 1))
-    sender_index = (sent_count // threshold) % len(senders)
-    return senders[sender_index]
+    return (sent_count // threshold) % len(senders)
+
+
+def sender_candidates(
+    senders: list[dict[str, Any]],
+    sent_count: int,
+    emails_per_account: int,
+) -> list[dict[str, Any]]:
+    """从当前轮换位置开始，给出本封邮件可尝试的发件邮箱顺序。"""
+    start = choose_sender_index(senders, sent_count, emails_per_account)
+    return senders[start:] + senders[:start]
 
 
 def build_message(

@@ -61,7 +61,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 New-Item -ItemType Directory -Path dist\config -Force | Out-Null
-Copy-Item config\config.yaml dist\config\config.yaml -Force
+$DistConfigPath = "dist\config\config.yaml"
+if (Test-Path $DistConfigPath) {
+  Write-Host "Keeping existing runtime config: $Root\$DistConfigPath"
+} else {
+  Copy-Item config\config.yaml $DistConfigPath -Force
+}
 if (Test-Path dist\Mails) {
   Remove-Item -LiteralPath dist\Mails -Recurse -Force
 }

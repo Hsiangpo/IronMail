@@ -47,8 +47,9 @@ def test_format_send_error_explains_gmx_ip_policy_block():
 
     message = format_send_error(error)
 
-    assert "GMX拒绝本次发信" in message
-    assert "当前出网IP 112.46.217.48 触发风控" in message
+    assert "GMX拒收本次发信" in message
+    assert "当前出网IP 112.46.217.48 被GMX策略限制" in message
+    assert "切换其他发件邮箱" in message
     assert "postmaster.gmx.net" not in message
 
 
@@ -130,6 +131,43 @@ def test_send_flow_resumes_failed_run_without_resending_success(tmp_path, monkey
     run_send_flow(tmp_path, config_path)
 
     assert sent == ["a@example.com", "b@example.com", "b@example.com"]
+
+
+def test_send_flow_switches_to_next_sender_after_sender_failure(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_runtime_config(config_path)
+    config_text = config_path.read_text(encoding="utf-8")
+    config_text = config_text.replace(
+        "settings:",
+        """
+  - email: backup@example.com
+    password: backup-password
+    name: Backup
+settings:
+""".rstrip(),
+    )
+    config_path.write_text(config_text, encoding="utf-8")
+    write_runtime_files(tmp_path)
+    monkeypatch.setattr("ironmail.main.time.sleep", lambda seconds: None)
+    inputs = iter(["1", "1"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    attempts = []
+
+    def sender_fallback_send(smtp_config, sender, recipient_email, subject, body):
+        attempts.append((sender["email"], recipient_email))
+        if sender["email"] == "backup@example.com":
+            raise OSError("sender rejected")
+        return True
+
+    monkeypatch.setattr("ironmail.mailer.send_email", sender_fallback_send)
+
+    run_send_flow(tmp_path, config_path)
+
+    assert attempts == [
+        ("sender@gmail.com", "a@example.com"),
+        ("backup@example.com", "b@example.com"),
+        ("sender@gmail.com", "b@example.com"),
+    ]
 
 
 def test_completed_run_can_be_cancelled_to_avoid_duplicate_send(tmp_path, monkeypatch):
