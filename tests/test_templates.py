@@ -39,11 +39,30 @@ def test_parse_template_supports_block_subject_layout(tmp_path):
     assert "{{邮箱}}" in template.body
 
 
+def test_parse_template_supports_sender_section_before_subject(tmp_path):
+    path = tmp_path / "带发件人.md"
+    path.write_text(
+        "发件人：\n"
+        "{{法人}}\n\n"
+        "邮件主题：\n"
+        "关于 {{网页}} 的沟通\n\n"
+        "邮件正文：\n"
+        "{{法人}}您好\n",
+        encoding="utf-8",
+    )
+
+    template = templates.parse_template_file(path)
+
+    assert template.sender == "{{法人}}"
+    assert template.subject == "关于 {{网页}} 的沟通"
+    assert template.body == "{{法人}}您好"
+
+
 def test_create_template_file_writes_editable_scaffold(tmp_path):
     created = templates.create_template_file(tmp_path, "德国邀请")
 
     assert created.name == "德国邀请.md"
-    assert created.read_text(encoding="utf-8") == "邮件主题：\n\n邮件正文：\n"
+    assert created.read_text(encoding="utf-8") == "发件人：\n\n邮件主题：\n\n邮件正文：\n"
 
 
 def test_render_template_replaces_row_variables():
@@ -59,15 +78,30 @@ def test_render_template_replaces_row_variables():
     assert rendered == ("关于 OldIron 的合作沟通", "张先生您好，网站是 oldiron.us。")
 
 
+def test_render_template_fields_replaces_sender_variables():
+    template = templates.EmailTemplate(
+        sender="{{联系人}}",
+        subject="关于 {{公司名}}",
+        body="{{联系人}}您好",
+        path=None,
+    )
+    row = pd.Series({"公司名": "OldIron", "联系人": "张先生"})
+
+    rendered = templates.render_template_fields(template, row)
+
+    assert rendered == ("张先生", "关于 OldIron", "张先生您好")
+
+
 def test_missing_template_columns_are_reported():
     template = templates.EmailTemplate(
         subject="关于 {{公司名}} 的合作沟通",
         body="网站是 {{网页}}。",
+        sender="{{联系人}}",
         path=None,
     )
     df = pd.DataFrame([{"邮箱": "a@example.com", "公司名": "OldIron"}])
 
-    assert templates.find_missing_template_columns(template, df) == ["网页"]
+    assert templates.find_missing_template_columns(template, df) == ["网页", "联系人"]
 
 
 def test_apply_template_to_dataframe_adds_subject_and_body():
@@ -82,6 +116,20 @@ def test_apply_template_to_dataframe_adds_subject_and_body():
 
     assert rendered.loc[0, "邮件主题"] == "关于 OldIron"
     assert rendered.loc[0, "邮件正文"] == "张先生您好"
+
+
+def test_apply_template_to_dataframe_adds_sender_when_template_defines_it():
+    template = templates.EmailTemplate(
+        sender="{{联系人}}",
+        subject="关于 {{公司名}}",
+        body="{{联系人}}您好",
+        path=None,
+    )
+    df = pd.DataFrame([{"邮箱": "a@example.com", "公司名": "OldIron", "联系人": "张先生"}])
+
+    rendered = templates.apply_template_to_dataframe(df, template)
+
+    assert rendered.loc[0, "发件人"] == "张先生"
 
 
 def test_list_template_files_skips_readme_and_non_markdown(tmp_path):

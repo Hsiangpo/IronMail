@@ -202,14 +202,13 @@ def list_senders(config: dict[str, Any], print_func: PrintFunc) -> None:
     if not senders:
         print_func("暂无发件邮箱。")
         return
-    print_func("序号  邮箱地址                         显示名称        SMTP")
-    print_func("-" * 78)
+    print_func("序号  邮箱地址                         SMTP")
+    print_func("-" * 64)
     for index, sender in enumerate(senders, 1):
         masked = config_manager.mask_sender(sender)
         smtp = config_manager.resolve_sender_smtp(config, sender)
         print_func(
-            f"{index:<4}  {masked['email']:<30}  {masked.get('name') or '-':<12}  "
-            f"{smtp['host']}:{smtp['port']}"
+            f"{index:<4}  {masked['email']:<30}  {smtp['host']}:{smtp['port']}"
         )
         print_func(f"      密码: {masked.get('password') or '-'}")
 
@@ -223,17 +222,12 @@ def add_sender_interactive(
     """交互式新增发件邮箱"""
     print_header("新增发件邮箱", print_func)
     print_smtp_setup_guide(print_func)
-    print_step(1, 4, "填写邮箱地址", "填写要用于发件的完整邮箱地址，例如 yourname@gmail.com 或 yourname@gmx.com。", print_func)
+    print_step(1, 3, "填写邮箱地址", "填写要用于发件的完整邮箱地址，例如 yourname@gmail.com 或 yourname@gmx.com。", print_func)
     email = input_func("邮箱地址，输入0返回上一层: ").strip()
     if is_back_command(email):
         print_returned(print_func)
         return
-    print_step(2, 4, "填写显示名称", "显示名称会出现在邮件发件人位置。直接回车时使用邮箱地址。", print_func)
-    name = input_func("显示名称，直接回车则使用邮箱地址，输入0返回上一层: ").strip()
-    if is_back_command(name):
-        print_returned(print_func)
-        return
-    print_step(3, 4, "填写邮箱密码", "Gmail 填16位应用专用密码。GMX 填可用于SMTP的密码或应用密码。", print_func)
+    print_step(2, 3, "填写邮箱密码", "Gmail 填16位应用专用密码。GMX 填可用于SMTP的密码或应用密码。", print_func)
     password = read_password("邮箱SMTP密码，输入0返回上一层: ", input_func)
     if is_back_command(password):
         print_returned(print_func)
@@ -241,7 +235,7 @@ def add_sender_interactive(
     if not password:
         print_func("保存失败: 密码不能为空。Gmail 请填写16位应用专用密码，不是网页登录密码。")
         return
-    print_step(4, 4, "SMTP设置", "一般直接回车即可。只有服务商给了单独的SMTP信息时，才需要手动填写。", print_func)
+    print_step(3, 3, "SMTP设置", "一般直接回车即可。只有服务商给了单独的SMTP信息时，才需要手动填写。", print_func)
     smtp_fields = read_smtp_fields(input_func, print_func, email=email)
     if smtp_fields is None:
         return
@@ -250,7 +244,6 @@ def add_sender_interactive(
         sender = config_manager.build_sender(
             email=email,
             password=password,
-            name=name,
             smtp_host=smtp_host,
             smtp_port=smtp_port,
             smtp_use_ssl=smtp_use_ssl,
@@ -271,30 +264,23 @@ def edit_sender_interactive(
     print_func: PrintFunc,
 ) -> None:
     """交互式修改发件邮箱"""
-    print_step(1, 4, "选择要修改的邮箱", "输入列表里的邮箱序号。输入0返回上一层。", print_func)
+    print_step(1, 3, "选择要修改的邮箱", "输入列表里的邮箱序号。输入0返回上一层。", print_func)
     sender = pick_sender(config, input_func, print_func)
     if not sender:
         return
     print_smtp_setup_guide(print_func)
     print_func("直接回车表示保留原值，输入0返回上一层。")
-    print_step(2, 4, "修改显示名称", "直接回车保留原显示名称。输入0返回上一层。", print_func)
-    name = input_func(f"显示名称 [{sender.get('name') or '-'}]: ").strip()
-    if is_back_command(name):
-        print_returned(print_func)
-        return
-    print_step(3, 4, "修改邮箱密码", "直接回车保留原密码。输入新密码会覆盖旧密码。", print_func)
+    print_step(2, 3, "修改邮箱密码", "直接回车保留原密码。输入新密码会覆盖旧密码。", print_func)
     password = read_password("新密码，直接回车保留原密码，输入0返回上一层: ", input_func)
     if is_back_command(password):
         print_returned(print_func)
         return
-    print_step(4, 4, "修改SMTP设置", "直接回车使用默认设置。手动填写会保存为该邮箱专属SMTP设置。", print_func)
+    print_step(3, 3, "修改SMTP设置", "直接回车使用默认设置。手动填写会保存为该邮箱专属SMTP设置。", print_func)
     smtp_fields = read_smtp_fields(input_func, print_func, sender, sender.get("email", ""))
     if smtp_fields is None:
         return
     smtp_host, smtp_port, smtp_use_ssl = smtp_fields
     updates: dict[str, Any] = {}
-    if name:
-        updates["name"] = name
     if password:
         updates["password"] = password
     if smtp_host:

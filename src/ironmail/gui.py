@@ -565,6 +565,8 @@ class IronMailApp(Tk):
                     send_progress.mark_row_completed(progress_state, row_key, "skipped_empty_email")
                     self.gui_log(f"[{index + 1}/{len(df)}] 跳过空邮箱")
                     continue
+                sender_name_value = row.get("发件人", "")
+                sender_name = "" if pd.isna(sender_name_value) else str(sender_name_value).strip()
                 subject = str(row["邮件主题"]).strip()
                 body = str(row["邮件正文"]).strip()
                 sent = False
@@ -577,7 +579,14 @@ class IronMailApp(Tk):
                         self.gui_log(f"[{index + 1}/{len(df)}] 切换发件邮箱重试 -> {current_sender['email']}")
                     for attempt in range(max_retries):
                         try:
-                            mailer.send_email(smtp_config, current_sender, recipient_email, subject, body)
+                            mailer.send_email(
+                                smtp_config,
+                                current_sender,
+                                recipient_email,
+                                subject,
+                                body,
+                                sender_name=sender_name,
+                            )
                             success_count += 1
                             send_attempt_count += 1
                             sent = True
@@ -627,12 +636,11 @@ class IronMailApp(Tk):
         self.add_info_panel(self.senders_tab, "SMTP 配置参考", SMTP_REFERENCE_LINES, row=0, links=SMTP_REFERENCE_LINKS)
         self.sender_tree = ttk.Treeview(
             self.senders_tab,
-            columns=("name", "smtp"),
+            columns=("smtp",),
             show="tree headings",
             height=14,
         )
         self.sender_tree.heading("#0", text="邮箱")
-        self.sender_tree.heading("name", text="显示名称")
         self.sender_tree.heading("smtp", text="SMTP")
         self.sender_tree.grid(row=1, column=0, sticky="nsew")
         buttons = ttk.Frame(self.senders_tab, style="Toolbar.TFrame")
@@ -654,7 +662,7 @@ class IronMailApp(Tk):
                 END,
                 iid=str(index),
                 text=sender.get("email", ""),
-                values=(sender.get("name") or "-", f"{smtp['host']}:{smtp['port']}"),
+                values=(f"{smtp['host']}:{smtp['port']}",),
             )
 
     def selected_sender(self) -> dict[str, Any] | None:
@@ -1042,7 +1050,6 @@ class SenderDialog(Toplevel):
         self.resizable(False, False)
         self.configure(background=COLORS["surface"])
         self.email_var = StringVar(value=sender.get("email", "") if sender else "")
-        self.name_var = StringVar(value=sender.get("name", "") if sender else "")
         self.password_var = StringVar(value=sender.get("password", "") if sender else "")
         smtp = sender.get("smtp", {}) if sender else {}
         self.smtp_host_var = StringVar(value=smtp.get("host", "") if smtp else "")
@@ -1056,7 +1063,6 @@ class SenderDialog(Toplevel):
         frame.grid(row=0, column=0, sticky="nsew")
         fields = [
             ("邮箱地址", self.email_var),
-            ("显示名称", self.name_var),
             ("SMTP密码/应用密码", self.password_var),
             ("SMTP服务器（可留空自动识别）", self.smtp_host_var),
             ("SMTP端口", self.smtp_port_var),
@@ -1096,7 +1102,6 @@ class SenderDialog(Toplevel):
         sender = config_manager.build_sender(
             email=email,
             password=password,
-            name=self.name_var.get().strip(),
             smtp_host=smtp_host,
             smtp_port=int(self.smtp_port_var.get() or 465),
             smtp_use_ssl=self.smtp_ssl_var.get(),

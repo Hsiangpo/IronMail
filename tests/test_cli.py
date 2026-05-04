@@ -38,7 +38,6 @@ def test_sender_menu_adds_gmail_default_sender_after_smtp_test(tmp_path, monkeyp
     inputs = make_input([
         "2",
         "sales@oldiron.us",
-        "销售",
         "app-password",
         "",
         "0",
@@ -67,7 +66,6 @@ def test_sender_menu_adds_gmx_sender_with_provider_smtp(tmp_path, monkeypatch):
     inputs = make_input([
         "2",
         "sender@gmx.com",
-        "GMX销售",
         "smtp-password",
         "",
         "0",
@@ -88,13 +86,12 @@ def test_sender_menu_adds_gmx_sender_with_provider_smtp(tmp_path, monkeypatch):
     assert sender["smtp"] == {"host": "mail.gmx.com", "port": 465, "use_ssl": True}
     assert tested == [("mail.gmx.com", 465, "sender@gmx.com")]
     joined = "\n".join(output)
-    assert "步骤 1/4: 填写邮箱地址" in joined
+    assert "步骤 1/3: 填写邮箱地址" in joined
     assert "提示：填写要用于发件的完整邮箱地址" in joined
-    assert "步骤 2/4: 填写显示名称" in joined
-    assert "提示：显示名称会出现在邮件发件人位置" in joined
-    assert "步骤 3/4: 填写邮箱密码" in joined
+    assert "显示名称" not in joined
+    assert "步骤 2/3: 填写邮箱密码" in joined
     assert "提示：Gmail 填16位应用专用密码" in joined
-    assert "步骤 4/4: SMTP设置" in joined
+    assert "步骤 3/3: SMTP设置" in joined
     assert "提示：一般直接回车即可" in joined
 
 
@@ -104,7 +101,6 @@ def test_sender_menu_does_not_save_when_smtp_test_fails(tmp_path, monkeypatch):
     inputs = make_input([
         "2",
         "bad@gmail.com",
-        "Bad",
         "wrong-password",
         "",
         "0",
@@ -348,7 +344,6 @@ def test_add_sender_smtp_guidance_stays_plain_and_compact(tmp_path, monkeypatch)
     write_config(config_path)
     inputs = make_input([
         "sender@gmx.com",
-        "GMX销售",
         "smtp-password",
         "",
     ])
@@ -358,7 +353,7 @@ def test_add_sender_smtp_guidance_stays_plain_and_compact(tmp_path, monkeypatch)
     cli.add_sender_interactive(config_path, config_manager.load_config(config_path), inputs, output.append)
 
     joined = "\n".join(output)
-    assert "步骤 4/4: SMTP设置" in joined
+    assert "步骤 3/3: SMTP设置" in joined
     assert "提示：一般直接回车即可" in joined
     assert "已识别为 GMX 邮箱" in joined
     assert "直接回车会使用默认SMTP设置" in joined
@@ -381,7 +376,6 @@ def test_add_sender_rejects_empty_password(tmp_path):
     write_config(config_path)
     inputs = make_input([
         "sales@gmail.com",
-        "销售",
         "",
         "",
     ])
@@ -504,7 +498,7 @@ def test_template_menu_creates_template_and_opens_file(tmp_path, monkeypatch):
 
     template_path = tmp_path / "Mails" / "邮件模板" / "德国邀请.md"
     assert template_path.exists()
-    assert template_path.read_text(encoding="utf-8") == "邮件主题：\n\n邮件正文：\n"
+    assert template_path.read_text(encoding="utf-8") == "发件人：\n\n邮件主题：\n\n邮件正文：\n"
     assert opened == [template_path]
     joined = "\n".join(output)
     assert "步骤 1/1: 填写模板名称" in joined

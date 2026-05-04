@@ -114,7 +114,7 @@ def test_send_flow_resumes_failed_run_without_resending_success(tmp_path, monkey
     monkeypatch.setattr("builtins.input", lambda prompt="": next(first_inputs))
     sent = []
 
-    def flaky_send(smtp_config, sender, recipient_email, subject, body):
+    def flaky_send(smtp_config, sender, recipient_email, subject, body, sender_name=None):
         sent.append(recipient_email)
         if recipient_email == "b@example.com":
             raise OSError("network down")
@@ -126,7 +126,7 @@ def test_send_flow_resumes_failed_run_without_resending_success(tmp_path, monkey
 
     second_inputs = iter(["1", "1", "Y"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(second_inputs))
-    monkeypatch.setattr("ironmail.mailer.send_email", lambda *args: sent.append(args[2]) or True)
+    monkeypatch.setattr("ironmail.mailer.send_email", lambda *args, **kwargs: sent.append(args[2]) or True)
 
     run_send_flow(tmp_path, config_path)
 
@@ -153,7 +153,7 @@ settings:
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
     attempts = []
 
-    def sender_fallback_send(smtp_config, sender, recipient_email, subject, body):
+    def sender_fallback_send(smtp_config, sender, recipient_email, subject, body, sender_name=None):
         attempts.append((sender["email"], recipient_email))
         if sender["email"] == "backup@example.com":
             raise OSError("sender rejected")
@@ -170,20 +170,44 @@ settings:
     ]
 
 
+def test_send_flow_passes_template_sender_name_to_mailer(tmp_path, monkeypatch):
+    config_path = tmp_path / "config" / "config.yaml"
+    write_runtime_config(config_path)
+    _, template_path = write_runtime_files(tmp_path)
+    template_path.write_text(
+        "发件人：\n{{法人}}\n\n邮件主题：关于 {{网页}}\n\n邮件正文：{{法人}}您好",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("ironmail.main.time.sleep", lambda seconds: None)
+    inputs = iter(["1", "1"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    sender_names = []
+
+    def record_send(smtp_config, sender, recipient_email, subject, body, sender_name=None):
+        sender_names.append(sender_name)
+        return True
+
+    monkeypatch.setattr("ironmail.mailer.send_email", record_send)
+
+    run_send_flow(tmp_path, config_path)
+
+    assert sender_names == ["张一", "张二"]
+
+
 def test_completed_run_can_be_cancelled_to_avoid_duplicate_send(tmp_path, monkeypatch):
     config_path = tmp_path / "config" / "config.yaml"
     write_runtime_config(config_path)
     write_runtime_files(tmp_path)
     monkeypatch.setattr("ironmail.main.time.sleep", lambda seconds: None)
     monkeypatch.setattr("builtins.input", lambda prompt="": "1")
-    monkeypatch.setattr("ironmail.mailer.send_email", lambda *args: True)
+    monkeypatch.setattr("ironmail.mailer.send_email", lambda *args, **kwargs: True)
 
     run_send_flow(tmp_path, config_path)
 
     sent = []
     inputs = iter(["1", "1", "N"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
-    monkeypatch.setattr("ironmail.mailer.send_email", lambda *args: sent.append(args[2]) or True)
+    monkeypatch.setattr("ironmail.mailer.send_email", lambda *args, **kwargs: sent.append(args[2]) or True)
 
     run_send_flow(tmp_path, config_path)
 

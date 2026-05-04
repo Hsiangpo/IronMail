@@ -451,6 +451,8 @@ def run_send_flow(app_dir: Path, config_path: Path):
 
     for index, row in df.iterrows():
         recipient_email = str(row['邮箱']).strip()
+        sender_name_value = row.get("发件人", "")
+        sender_name = "" if pd.isna(sender_name_value) else str(sender_name_value).strip()
         subject = str(row['邮件主题']).strip()
         body = str(row['邮件正文']).strip()
         row_key = send_progress.row_key(index, recipient_email)
@@ -479,7 +481,7 @@ def run_send_flow(app_dir: Path, config_path: Path):
             for attempt in range(max_retries):
                 try:
                     mailer.send_email(smtp_config, current_sender, recipient_email,
-                                      subject, body)
+                                      subject, body, sender_name=sender_name)
                     success_count += 1
                     send_attempt_count += 1
                     sent = True

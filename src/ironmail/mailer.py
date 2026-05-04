@@ -61,23 +61,24 @@ def build_message(
     recipient_email: str,
     subject: str,
     body: str,
+    sender_name: str | None = None,
 ) -> MIMEMultipart:
     """构造邮件内容"""
     msg = MIMEMultipart()
-    msg["From"] = format_sender_address(sender)
+    msg["From"] = format_sender_address(sender, sender_name)
     msg["To"] = recipient_email
     msg["Subject"] = Header(subject, "utf-8")
     msg.attach(MIMEText(body, "plain", "utf-8"))
     return msg
 
 
-def format_sender_address(sender: dict[str, Any]) -> str:
+def format_sender_address(sender: dict[str, Any], sender_name: str | None = None) -> str:
     """生成发件人From头，空显示名时使用裸邮箱地址。"""
     email = str(sender["email"]).strip()
-    sender_name = str(sender.get("name") or "").strip()
-    if not sender_name or sender_name.lower() == email.lower():
+    display_name = str(sender_name or "").strip()
+    if not display_name or display_name.lower() == email.lower():
         return email
-    return formataddr((str(Header(sender_name, "utf-8")), email))
+    return formataddr((str(Header(display_name, "utf-8")), email))
 
 
 def send_email(
@@ -86,9 +87,10 @@ def send_email(
     recipient_email: str,
     subject: str,
     body: str,
+    sender_name: str | None = None,
 ) -> bool:
     """发送单封邮件"""
-    msg = build_message(sender, recipient_email, subject, body)
+    msg = build_message(sender, recipient_email, subject, body, sender_name)
     with open_smtp_connection(smtp_config) as server:
         server.login(sender["email"], sender["password"])
         server.sendmail(sender["email"], recipient_email, msg.as_string())

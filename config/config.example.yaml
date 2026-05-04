@@ -22,7 +22,6 @@ smtp_proxy:
 senders:
   - email:
     password:
-    name: IronMail
     # Gmail可不填smtp；GMX可填写 mail.gmx.com:465 SSL，终端新增时会自动识别。
     # smtp:
     #   host: mail.gmx.com

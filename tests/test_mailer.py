@@ -35,12 +35,13 @@ def test_sender_candidates_start_from_current_rotation_position():
     ]
 
 
-def test_build_message_uses_sender_display_name():
+def test_build_message_uses_template_sender_display_name():
     message = mailer.build_message(
-        sender={"email": "sales@oldiron.us", "name": "销售"},
+        sender={"email": "sales@oldiron.us", "name": "旧配置名称"},
         recipient_email="buyer@example.com",
         subject="主题",
         body="正文",
+        sender_name="销售",
     )
 
     display_name, address = parseaddr(message["From"])
@@ -50,22 +51,35 @@ def test_build_message_uses_sender_display_name():
     assert "主题" in str(message["Subject"])
 
 
-def test_build_message_uses_bare_from_when_sender_name_is_blank_or_email():
+def test_build_message_uses_bare_from_when_template_sender_is_blank_or_email():
     blank_name = mailer.build_message(
-        sender={"email": "sender@gmx.com", "name": ""},
+        sender={"email": "sender@gmx.com", "name": "旧配置名称"},
         recipient_email="buyer@example.com",
         subject="hello",
         body="body",
+        sender_name="",
     )
     email_name = mailer.build_message(
-        sender={"email": "sender@gmx.com", "name": "sender@gmx.com"},
+        sender={"email": "sender@gmx.com", "name": "旧配置名称"},
+        recipient_email="buyer@example.com",
+        subject="hello",
+        body="body",
+        sender_name="sender@gmx.com",
+    )
+
+    assert blank_name["From"] == "sender@gmx.com"
+    assert email_name["From"] == "sender@gmx.com"
+
+
+def test_build_message_ignores_legacy_sender_config_name_without_template_sender():
+    message = mailer.build_message(
+        sender={"email": "sender@gmx.com", "name": "旧配置名称"},
         recipient_email="buyer@example.com",
         subject="hello",
         body="body",
     )
 
-    assert blank_name["From"] == "sender@gmx.com"
-    assert email_name["From"] == "sender@gmx.com"
+    assert message["From"] == "sender@gmx.com"
 
 
 def test_auto_route_uses_direct_when_it_works(monkeypatch):

@@ -11,9 +11,10 @@ import pandas as pd
 
 
 VARIABLE_PATTERN = re.compile(r"{{\s*([^{}]+?)\s*}}")
+SENDER_PREFIXES = ("发件人：", "发件人:", "发送人：", "发送人:")
 SUBJECT_PREFIXES = ("邮件主题：", "邮件主题:", "主题：", "主题:")
 BODY_PREFIXES = ("邮件正文：", "邮件正文:", "正文：", "正文:")
-TEMPLATE_SCAFFOLD = "邮件主题：\n\n邮件正文：\n"
+TEMPLATE_SCAFFOLD = "发件人：\n\n邮件主题：\n\n邮件正文：\n"
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class EmailTemplate:
     subject: str
     body: str
     path: Path | None
+    sender: str = ""
 
 
 def list_template_files(template_dir: Path) -> list[Path]:
@@ -40,14 +42,14 @@ def parse_template_file(template_path: Path) -> EmailTemplate:
     if not lines:
         raise ValueError("模板为空，请填写邮件主题和邮件正文。")
 
-    subject, body = _read_template_sections(lines)
+    sender, subject, body = _read_template_sections(lines)
     if subject is None:
-        raise ValueError("模板第一行必须以“邮件主题：”或“主题：”开头。")
+        raise ValueError("模板必须包含“邮件主题：”或“主题：”。")
     if not subject.strip():
         raise ValueError("模板邮件主题不能为空。")
     if not body.strip():
         raise ValueError("模板邮件正文不能为空。")
-    return EmailTemplate(subject=subject.strip(), body=body, path=template_path)
+    return EmailTemplate(subject=subject.strip(), body=body, path=template_path, sender=sender.strip())
 
 
 def create_template_file(template_dir: Path, name: str) -> Path:
@@ -63,21 +65,32 @@ def create_template_file(template_dir: Path, name: str) -> Path:
 
 def render_template(template: EmailTemplate, row: pd.Series) -> tuple[str, str]:
     """用表格当前行数据替换模板变量。"""
-    values = {str(key): _cell_to_text(value) for key, value in row.items()}
-    subject = _replace_variables(template.subject, values).strip()
-    body = _replace_variables(template.body, values).strip()
+    _, subject, body = render_template_fields(template, row)
     return subject, body
 
 
+def render_template_fields(template: EmailTemplate, row: pd.Series) -> tuple[str, str, str]:
+    """用表格当前行数据替换发件人、主题和正文变量。"""
+    values = {str(key): _cell_to_text(value) for key, value in row.items()}
+    sender = _replace_variables(template.sender, values).strip()
+    subject = _replace_variables(template.subject, values).strip()
+    body = _replace_variables(template.body, values).strip()
+    return sender, subject, body
+
+
 def apply_template_to_dataframe(df: pd.DataFrame, template: EmailTemplate) -> pd.DataFrame:
-    """把模板渲染结果写回邮件主题和邮件正文列。"""
+    """把模板渲染结果写回发件人、邮件主题和邮件正文列。"""
     rendered = df.copy()
+    senders = []
     subjects = []
     bodies = []
     for _, row in rendered.iterrows():
-        subject, body = render_template(template, row)
+        sender, subject, body = render_template_fields(template, row)
+        senders.append(sender)
         subjects.append(subject)
         bodies.append(body)
+    if template.sender.strip():
+        rendered["发件人"] = senders
     rendered["邮件主题"] = subjects
     rendered["邮件正文"] = bodies
     return rendered
@@ -92,7 +105,7 @@ def find_missing_template_columns(template: EmailTemplate, df: pd.DataFrame) -> 
 
 def extract_variables(template: EmailTemplate) -> set[str]:
     """提取模板里的变量名。"""
-    text = f"{template.subject}\n{template.body}"
+    text = f"{template.sender}\n{template.subject}\n{template.body}"
     return {match.group(1).strip() for match in VARIABLE_PATTERN.finditer(text)}
 
 
@@ -105,21 +118,24 @@ def _read_prefixed_value(line: str, prefixes: tuple[str, ...]) -> str | None:
     return None
 
 
-def _read_template_sections(lines: list[str]) -> tuple[str | None, str]:
-    """读取主题和正文，兼容单行和分块模板。"""
-    subject_inline = _read_prefixed_value(lines[0], SUBJECT_PREFIXES)
-    if subject_inline is None:
-        return None, ""
-    body_index = _find_prefixed_line(lines[1:], BODY_PREFIXES)
+def _read_template_sections(lines: list[str]) -> tuple[str, str | None, str]:
+    """读取发件人、主题和正文，兼容旧模板和分块模板。"""
+    subject_index = _find_prefixed_line(lines, SUBJECT_PREFIXES)
+    if subject_index is None:
+        return "", None, ""
+
+    sender = ""
+    sender_index = _find_prefixed_line(lines[:subject_index], SENDER_PREFIXES)
+    if sender_index is not None:
+        sender = _read_section_value(lines, sender_index, subject_index, SENDER_PREFIXES)
+
+    body_index = _find_prefixed_line(lines[subject_index + 1:], BODY_PREFIXES)
     if body_index is None:
-        return subject_inline, _read_body(lines[1:])
-    body_index += 1
-    if subject_inline.strip():
-        subject = subject_inline
-    else:
-        subject_lines = [line for line in lines[1:body_index] if line.strip()]
-        subject = "\n".join(subject_lines).strip()
-    return subject, _read_body(lines[body_index:])
+        subject = _read_section_value(lines, subject_index, len(lines), SUBJECT_PREFIXES)
+        return sender, subject, ""
+    body_index += subject_index + 1
+    subject = _read_section_value(lines, subject_index, body_index, SUBJECT_PREFIXES)
+    return sender, subject, _read_body(lines[body_index:])
 
 
 def _find_prefixed_line(lines: list[str], prefixes: tuple[str, ...]) -> int | None:
@@ -128,6 +144,20 @@ def _find_prefixed_line(lines: list[str], prefixes: tuple[str, ...]) -> int | No
         if _read_prefixed_value(line, prefixes) is not None:
             return index
     return None
+
+
+def _read_section_value(
+    lines: list[str],
+    marker_index: int,
+    end_index: int,
+    prefixes: tuple[str, ...],
+) -> str:
+    """读取发件人或主题段，兼容同一行和下一行内容。"""
+    inline_value = _read_prefixed_value(lines[marker_index], prefixes) or ""
+    if inline_value.strip():
+        return inline_value.strip()
+    section_lines = [line for line in lines[marker_index + 1:end_index] if line.strip()]
+    return "\n".join(section_lines).strip()
 
 
 def _read_body(lines: list[str]) -> str:
