@@ -6,6 +6,7 @@ import queue
 import shutil
 import threading
 import traceback
+import webbrowser
 from contextlib import redirect_stdout
 from datetime import datetime
 from io import StringIO
@@ -59,6 +60,11 @@ SMTP_REFERENCE_LINES = [
     "Gmail / Google Workspace：SMTP 服务器 smtp.gmail.com；SSL 用 465，STARTTLS 用 587；密码填写 Google 账号生成的 16 位应用专用密码，不是网页登录密码。",
     "GMX：SMTP 服务器 mail.gmx.com；SSL/TLS 用 465，STARTTLS 用 587；密码填写 GMX 可用于 SMTP 的密码或应用密码。",
     "其他邮箱：使用服务商后台提供的 SMTP 地址、端口和安全方式。465 通常勾选 SSL，587 通常关闭 SSL 走 STARTTLS。",
+]
+SMTP_REFERENCE_LINKS = [
+    ("Gmail SMTP 官方说明", "https://support.google.com/a/answer/176600"),
+    ("Google 应用专用密码", "https://support.google.com/accounts/answer/185833"),
+    ("GMX SMTP 官方参数", "https://support.gmx.com/pop-imap/imap/server.html"),
 ]
 
 SETTINGS_REFERENCE_LINES = [
@@ -149,6 +155,7 @@ class IronMailApp(Tk):
         style.configure("Muted.TLabel", background=COLORS["surface"], foreground=COLORS["muted"])
         style.configure("InfoTitle.TLabel", background=COLORS["info"], foreground=COLORS["text"], font=(FONT_FAMILY, 10, "bold"))
         style.configure("InfoText.TLabel", background=COLORS["info"], foreground=COLORS["muted"], font=(FONT_FAMILY, 9))
+        style.configure("InfoLink.TLabel", background=COLORS["info"], foreground=COLORS["primary"], font=(FONT_FAMILY, 9))
         style.configure("TButton", padding=(11, 6), background=COLORS["surface_alt"], foreground=COLORS["text"], borderwidth=1)
         style.map("TButton", background=[("active", "#eef2f7")])
         style.configure("Primary.TButton", padding=(14, 7), background=COLORS["primary"], foreground="#ffffff", borderwidth=0)
@@ -591,7 +598,7 @@ class IronMailApp(Tk):
     def _build_senders_tab(self) -> None:
         self.senders_tab.columnconfigure(0, weight=1)
         self.senders_tab.rowconfigure(1, weight=1)
-        self.add_info_panel(self.senders_tab, "SMTP 配置参考", SMTP_REFERENCE_LINES, row=0)
+        self.add_info_panel(self.senders_tab, "SMTP 配置参考", SMTP_REFERENCE_LINES, row=0, links=SMTP_REFERENCE_LINKS)
         self.sender_tree = ttk.Treeview(
             self.senders_tab,
             columns=("name", "smtp"),
@@ -939,6 +946,7 @@ class IronMailApp(Tk):
         columnspan: int = 1,
         wraplength: int = 960,
         pady: tuple[int, int] = (0, 12),
+        links: list[tuple[str, str]] | None = None,
     ) -> ttk.Frame:
         panel = ttk.Frame(parent, padding=(12, 10), style="Info.TFrame", relief="solid", borderwidth=1)
         panel.grid(row=row, column=column, columnspan=columnspan, sticky="ew", pady=pady)
@@ -952,7 +960,20 @@ class IronMailApp(Tk):
                 wraplength=wraplength,
                 justify="left",
             ).grid(row=index, column=0, sticky="w", pady=(4 if index == 1 else 2, 0))
+        if links:
+            link_frame = ttk.Frame(panel, style="Info.TFrame")
+            link_frame.grid(row=len(lines) + 1, column=0, sticky="w", pady=(8, 0))
+            for index, (label, url) in enumerate(links):
+                link = ttk.Label(link_frame, text=label, style="InfoLink.TLabel", cursor="hand2")
+                link.grid(row=0, column=index, sticky="w", padx=(0, 16))
+                link.bind("<Button-1>", lambda _event, target=url: self.open_url(target))
         return panel
+
+    def open_url(self, url: str) -> None:
+        try:
+            webbrowser.open_new_tab(url)
+        except Exception as error:
+            messagebox.showerror("打开链接失败", str(error))
 
     def configure_text_widget(self, widget: Text, monospace: bool = False) -> None:
         font = ("Consolas", 10) if monospace else (FONT_FAMILY, 10)
@@ -1021,6 +1042,7 @@ class SenderDialog(Toplevel):
             columnspan=2,
             wraplength=660,
             pady=(10, 4),
+            links=SMTP_REFERENCE_LINKS,
         )
         buttons = ttk.Frame(frame, style="Toolbar.TFrame")
         buttons.grid(row=len(fields) + 2, column=1, sticky="e", pady=(12, 0))
