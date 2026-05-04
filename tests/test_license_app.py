@@ -71,5 +71,8 @@ def test_admin_license_page_uses_polished_layout(tmp_path, monkeypatch):
     assert "table-shell" in html
     assert "状态总览" in html
     assert "页面测试" in html
-    assert code in html
+    assert "授权码前缀" not in html
     assert "完整授权码" in html
+    assert "查看完整授权码" in html
+    assert "detail-modal" in html
+    assert "openDetailModal" in html
