@@ -52,10 +52,13 @@ if (-not (Test-Path config\config.yaml)) {
 .\.venv\Scripts\pyinstaller.exe `
   --clean `
   --onefile `
-  --console `
+  --windowed `
   --paths src `
   --name IronMail `
   send_emails.py
+if ($LASTEXITCODE -ne 0) {
+  throw "PyInstaller failed with exit code $LASTEXITCODE"
+}
 
 New-Item -ItemType Directory -Path dist\config -Force | Out-Null
 Copy-Item config\config.yaml dist\config\config.yaml -Force
