@@ -14,6 +14,7 @@ def test_ensure_license_code_prompts_when_missing(monkeypatch, capsys):
 
     assert config["license"]["code"] == "IM-AAAAAA-BBBBBB-CCCCCC-DDDDDD"
     output = capsys.readouterr().out
+    assert output.startswith("\033[2J\033[H")
     assert "IronMail 授权验证" in output
     assert "授权状态" in output
     assert "验证服务器" not in output

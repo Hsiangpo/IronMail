@@ -539,6 +539,7 @@ def ensure_license_code(config: dict) -> None:
     code = str(license_config.get("code") or "").strip()
     if code:
         return
+    cli.clear_screen(input, print, force=True)
     print_license_entry_panel(config)
     code = input("授权码（输入0退出）: ").strip()
     if code == "0":
