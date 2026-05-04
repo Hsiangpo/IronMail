@@ -205,7 +205,7 @@ def test_console_clears_before_starting_send(monkeypatch, tmp_path):
 
     cli.run_console(config_path, lambda: started.append(True), input, print, license_verified=True)
 
-    clear_count = sum(1 for text, _ in output if text == "\033[2J\033[H")
+    clear_count = sum(1 for text, _ in output if text == cli.CLEAR_SCREEN_SEQUENCE)
     assert started == [True]
     assert clear_count >= 2
 
@@ -222,7 +222,7 @@ def test_console_forces_clear_for_builtin_terminal_even_when_isatty_false(monkey
 
     cli.run_console(config_path, lambda: None, input, print, license_verified=True)
 
-    assert ("\033[2J\033[H", "") in output
+    assert (cli.CLEAR_SCREEN_SEQUENCE, "") in output
 
 
 def test_smtp_setup_guide_mentions_gmail_app_password():
@@ -267,7 +267,7 @@ def test_console_uses_single_screen_refresh_for_real_terminal(monkeypatch):
 
     cli.clear_screen(input, print)
 
-    assert output == [("\033[2J\033[H", "")]
+    assert output == [(cli.CLEAR_SCREEN_SEQUENCE, "")]
 
 
 def test_console_does_not_pause_when_stdin_is_piped(monkeypatch):

@@ -16,6 +16,7 @@ InputFunc = Callable[[str], str]
 PrintFunc = Callable[[str], None]
 BACK_COMMAND = "0"
 PANEL_WIDTH = 72
+CLEAR_SCREEN_SEQUENCE = "\033[2J\033[3J\033[H"
 
 
 def run_console(
@@ -530,11 +531,17 @@ def smtp_failure_hint(error: Exception) -> str:
 def clear_screen(input_func: InputFunc, print_func: PrintFunc, force: bool = False) -> None:
     """真实终端下清屏，测试注入输入时不输出控制字符。"""
     if force and is_builtin_console(input_func, print_func):
-        print_func("\033[2J\033[H", end="")
+        emit_clear_sequence(print_func)
         return
     if not is_real_terminal(input_func, print_func):
         return
-    print_func("\033[2J\033[H", end="")
+    emit_clear_sequence(print_func)
+
+
+def emit_clear_sequence(print_func: PrintFunc) -> None:
+    """输出清屏并清除滚动历史的控制符。"""
+    print_func(CLEAR_SCREEN_SEQUENCE, end="")
+    sys.stdout.flush()
 
 
 def pause_after_action(input_func: InputFunc, print_func: PrintFunc) -> None:
