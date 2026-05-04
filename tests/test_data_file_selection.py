@@ -5,14 +5,15 @@ import pandas as pd
 from ironmail.main import (
     choose_data_file,
     choose_template_file,
+    get_recipient_dir,
     list_data_files,
     validate_email_dataframe,
 )
 
 
 def test_list_data_files_orders_xlsx_before_csv_and_skips_excel_lock(tmp_path):
-    mails_dir = tmp_path / "Mails"
-    mails_dir.mkdir()
+    mails_dir = tmp_path / "Mails" / "收件名单"
+    mails_dir.mkdir(parents=True)
     (mails_dir / "b.csv").write_text("x", encoding="utf-8")
     (mails_dir / "a.xlsx").write_text("x", encoding="utf-8")
     (mails_dir / "~$lock.xlsx").write_text("x", encoding="utf-8")
@@ -23,9 +24,9 @@ def test_list_data_files_orders_xlsx_before_csv_and_skips_excel_lock(tmp_path):
 
 
 def test_choose_data_file_prompts_even_when_single_file(tmp_path, monkeypatch, capsys):
-    mails_dir = tmp_path / "Mails"
-    mails_dir.mkdir()
-    target = mails_dir / "only.csv"
+    recipient_dir = tmp_path / "Mails" / "收件名单"
+    recipient_dir.mkdir(parents=True)
+    target = recipient_dir / "only.csv"
     target.write_text("x", encoding="utf-8")
     monkeypatch.setattr("builtins.input", lambda prompt="": "1")
 
@@ -36,9 +37,9 @@ def test_choose_data_file_prompts_even_when_single_file(tmp_path, monkeypatch, c
 
 
 def test_choose_data_file_uses_explicit_config_without_prompt(tmp_path, monkeypatch):
-    mails_dir = tmp_path / "Mails"
-    mails_dir.mkdir()
-    target = mails_dir / "fixed.csv"
+    recipient_dir = tmp_path / "Mails" / "收件名单"
+    recipient_dir.mkdir(parents=True)
+    target = recipient_dir / "fixed.csv"
     target.write_text("x", encoding="utf-8")
     monkeypatch.setattr("builtins.input", lambda prompt="": (_ for _ in ()).throw(AssertionError("不应要求输入")))
 
@@ -46,20 +47,20 @@ def test_choose_data_file_uses_explicit_config_without_prompt(tmp_path, monkeypa
 
 
 def test_choose_data_file_prompts_when_multiple_files(tmp_path, monkeypatch):
-    mails_dir = tmp_path / "Mails"
-    mails_dir.mkdir()
-    (mails_dir / "first.xlsx").write_text("x", encoding="utf-8")
-    (mails_dir / "second.csv").write_text("x", encoding="utf-8")
+    recipient_dir = tmp_path / "Mails" / "收件名单"
+    recipient_dir.mkdir(parents=True)
+    (recipient_dir / "first.xlsx").write_text("x", encoding="utf-8")
+    (recipient_dir / "second.csv").write_text("x", encoding="utf-8")
     monkeypatch.setattr("builtins.input", lambda prompt="": "2")
 
     assert choose_data_file(tmp_path).name == "second.csv"
 
 
 def test_choose_data_file_can_return_to_main_menu(tmp_path, monkeypatch, capsys):
-    mails_dir = tmp_path / "Mails"
-    mails_dir.mkdir()
-    (mails_dir / "first.xlsx").write_text("x", encoding="utf-8")
-    (mails_dir / "second.csv").write_text("x", encoding="utf-8")
+    recipient_dir = tmp_path / "Mails" / "收件名单"
+    recipient_dir.mkdir(parents=True)
+    (recipient_dir / "first.xlsx").write_text("x", encoding="utf-8")
+    (recipient_dir / "second.csv").write_text("x", encoding="utf-8")
     monkeypatch.setattr("builtins.input", lambda prompt="": "0")
 
     assert choose_data_file(tmp_path) is None
@@ -69,12 +70,23 @@ def test_choose_data_file_can_return_to_main_menu(tmp_path, monkeypatch, capsys)
 
 
 def test_choose_data_file_reads_from_recipient_list_folder(tmp_path, monkeypatch):
-    recipient_dir = tmp_path / "Mails" / "收件人名单"
+    recipient_dir = tmp_path / "Mails" / "收件名单"
     recipient_dir.mkdir(parents=True)
     (recipient_dir / "名单.xlsx").write_text("x", encoding="utf-8")
     monkeypatch.setattr("builtins.input", lambda prompt="": "1")
 
     assert choose_data_file(tmp_path).name == "名单.xlsx"
+
+
+def test_get_recipient_dir_migrates_legacy_recipient_folder(tmp_path):
+    legacy_dir = tmp_path / "Mails" / "收件人名单"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "旧名单.xlsx").write_text("x", encoding="utf-8")
+
+    recipient_dir = get_recipient_dir(tmp_path)
+
+    assert recipient_dir == tmp_path / "Mails" / "收件名单"
+    assert (recipient_dir / "旧名单.xlsx").exists()
 
 
 def test_validate_email_dataframe_requires_only_email_with_template():

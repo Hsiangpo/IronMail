@@ -16,7 +16,7 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from ironmail import cli, config_manager, mailer, send_progress, templates
+from ironmail import cli, config_manager, mailer, recipient_lists, send_progress, templates
 from ironmail.license import verify_license
 
 # 设置SSL证书路径（修复Windows上的证书问题）
@@ -60,8 +60,7 @@ SENSITIVE_WORDS = {
 }
 
 
-RECIPIENT_DIR_NAME = "收件人名单"
-LEGACY_RECIPIENT_DIR_NAME = "发件对象"
+RECIPIENT_DIR_NAME = recipient_lists.RECIPIENT_DIR_NAME
 TEMPLATE_DIR_NAME = "邮件模板"
 LEGACY_TEMPLATE_DIR_NAME = "模板"
 REQUIRED_WITH_TEMPLATE = ["邮箱"]
@@ -140,18 +139,7 @@ def get_app_dir() -> Path:
 def list_data_files(data_dir: Path) -> list[Path]:
     """列出Mails文件夹里的xlsx或csv文件"""
     data_dir = resolve_recipient_dir_from_mails(data_dir)
-    if not data_dir.exists():
-        raise FileNotFoundError(f"未找到表格文件夹: {data_dir}")
-
-    xlsx_files = sorted(
-        file for file in data_dir.glob('*.xlsx')
-        if not file.name.startswith('~$')
-    )
-    csv_files = sorted(
-        file for file in data_dir.glob('*.csv')
-        if not file.name.startswith('~$')
-    )
-    return xlsx_files + csv_files
+    return recipient_lists.list_recipient_files(data_dir)
 
 
 def find_data_file(data_dir: Path) -> Path:
@@ -168,17 +156,8 @@ def get_mails_dir(app_dir: Path) -> Path:
 
 
 def get_recipient_dir(app_dir: Path) -> Path:
-    """获取收件人名单目录，兼容旧目录名。"""
-    mails_dir = get_mails_dir(app_dir)
-    preferred = mails_dir / RECIPIENT_DIR_NAME
-    legacy = mails_dir / LEGACY_RECIPIENT_DIR_NAME
-    if preferred.exists():
-        return preferred
-    if legacy.exists():
-        return legacy
-    if mails_dir.exists():
-        return mails_dir
-    return preferred
+    """获取收件名单目录，兼容并迁移旧目录名。"""
+    return recipient_lists.ensure_recipient_dir(app_dir)
 
 
 def get_template_dir(app_dir: Path) -> Path:
@@ -194,14 +173,8 @@ def get_template_dir(app_dir: Path) -> Path:
 
 
 def resolve_recipient_dir_from_mails(data_dir: Path) -> Path:
-    """传入Mails目录时自动转到收件人名单子目录。"""
-    preferred = data_dir / RECIPIENT_DIR_NAME
-    legacy = data_dir / LEGACY_RECIPIENT_DIR_NAME
-    if preferred.exists():
-        return preferred
-    if legacy.exists():
-        return legacy
-    return data_dir
+    """传入Mails目录时自动转到收件名单子目录。"""
+    return recipient_lists.resolve_recipient_dir_from_mails(data_dir)
 
 
 def resolve_data_file(app_dir: Path, excel_file: str) -> Path:
@@ -254,12 +227,7 @@ def choose_data_file(app_dir: Path, excel_file: Optional[str] = None) -> Path | 
 
 def read_data_file(file_path: Path) -> pd.DataFrame:
     """根据文件类型读取数据"""
-    if file_path.suffix.lower() == '.xlsx':
-        return pd.read_excel(file_path)
-    elif file_path.suffix.lower() == '.csv':
-        return pd.read_csv(file_path, encoding='utf-8')
-    else:
-        raise ValueError(f"不支持的文件格式: {file_path.suffix}")
+    return recipient_lists.read_table(file_path)
 
 
 def choose_template_file(app_dir: Path, allow_table_fields: bool) -> Path | str | None:

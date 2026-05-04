@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
-from ironmail import config_manager, mailer, templates
+from ironmail import config_manager, mailer, recipient_lists, templates
 
 
 InputFunc = Callable[[str], str]
@@ -42,8 +42,10 @@ def run_console(
         elif choice == "2":
             manage_senders(config_path, input_func, print_func)
         elif choice == "3":
-            manage_templates(config_path, input_func, print_func)
+            recipient_lists.manage_recipient_lists(config_path, input_func, print_func)
         elif choice == "4":
+            manage_templates(config_path, input_func, print_func)
+        elif choice == "5":
             manage_config(config_path, input_func, print_func)
         elif choice == "0":
             print_func("已退出。")
@@ -81,8 +83,9 @@ def show_main_menu(
         [
             "1. 开始发送邮件",
             "2. 管理发件邮箱",
-            "3. 管理邮件模板",
-            "4. 配置",
+            "3. 管理收件名单",
+            "4. 管理邮件模板",
+            "5. 配置",
             "0. 退出",
         ]
     )

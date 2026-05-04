@@ -88,7 +88,7 @@ settings:
 
 
 def write_runtime_files(app_dir: Path) -> tuple[Path, Path]:
-    recipient_dir = app_dir / "Mails" / "收件人名单"
+    recipient_dir = app_dir / "Mails" / "收件名单"
     template_dir = app_dir / "Mails" / "邮件模板"
     recipient_dir.mkdir(parents=True)
     template_dir.mkdir(parents=True)

@@ -15,6 +15,10 @@ logs/
 docs/vps.md
 
 # Recipient spreadsheets may contain real customer data.
+Mails/收件名单/*.xlsx
+Mails/收件名单/*.xlsm
+Mails/收件名单/*.xls
+Mails/收件名单/~$*
 Mails/收件人名单/*.xlsx
 Mails/收件人名单/*.xlsm
 Mails/收件人名单/*.xls

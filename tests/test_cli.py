@@ -269,11 +269,11 @@ def test_main_menu_shows_runtime_verified_license():
     assert "授权状态  本次已验证" in joined
     assert "1. 开始发送邮件" in joined
     assert "2. 管理发件邮箱" in joined
-    assert "3. 管理邮件模板" in joined
-    assert "4. 配置" in joined
+    assert "3. 管理收件名单" in joined
+    assert "4. 管理邮件模板" in joined
+    assert "5. 配置" in joined
     assert "调整发送设置" not in joined
     assert "设置授权码" not in joined
-    assert "5." not in joined
     assert "6." not in joined
     assert "查看当前配置" not in joined
 
@@ -283,12 +283,13 @@ def test_console_routes_compact_main_menu_items(monkeypatch, tmp_path):
     write_config(config_path)
     calls = []
 
+    monkeypatch.setattr("ironmail.cli.recipient_lists.manage_recipient_lists", lambda *args: calls.append("recipients"))
     monkeypatch.setattr("ironmail.cli.manage_templates", lambda *args: calls.append("templates"))
     monkeypatch.setattr("ironmail.cli.manage_config", lambda *args: calls.append("config"))
 
-    cli.run_console(config_path, lambda: None, make_input(["3", "4", "0"]), lambda line: None, license_verified=True)
+    cli.run_console(config_path, lambda: None, make_input(["3", "4", "5", "0"]), lambda line: None, license_verified=True)
 
-    assert calls == ["templates", "config"]
+    assert calls == ["recipients", "templates", "config"]
 
 
 def test_console_clears_before_starting_send(monkeypatch, tmp_path):
