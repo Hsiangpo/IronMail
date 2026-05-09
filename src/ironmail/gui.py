@@ -646,10 +646,11 @@ class IronMailApp(Tk):
         buttons = ttk.Frame(self.senders_tab, style="Toolbar.TFrame")
         buttons.grid(row=2, column=0, sticky="ew", pady=10)
         ttk.Button(buttons, text="新增", command=lambda: self.open_sender_dialog()).grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(buttons, text="修改", command=self.edit_selected_sender).grid(row=0, column=1, padx=(0, 8))
-        ttk.Button(buttons, text="删除", command=self.delete_selected_sender).grid(row=0, column=2, padx=(0, 8))
-        ttk.Button(buttons, text="测试选中", command=self.test_selected_sender).grid(row=0, column=3, padx=(0, 8))
-        ttk.Button(buttons, text="测试全部", command=self.test_all_senders).grid(row=0, column=4, padx=(0, 8))
+        ttk.Button(buttons, text="批量新增", command=self.open_batch_sender_dialog).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(buttons, text="修改", command=self.edit_selected_sender).grid(row=0, column=2, padx=(0, 8))
+        ttk.Button(buttons, text="删除", command=self.delete_selected_sender).grid(row=0, column=3, padx=(0, 8))
+        ttk.Button(buttons, text="测试选中", command=self.test_selected_sender).grid(row=0, column=4, padx=(0, 8))
+        ttk.Button(buttons, text="测试全部", command=self.test_all_senders).grid(row=0, column=5, padx=(0, 8))
 
     def refresh_senders(self) -> None:
         for item in self.sender_tree.get_children():
@@ -671,6 +672,9 @@ class IronMailApp(Tk):
 
     def open_sender_dialog(self, sender: dict[str, Any] | None = None) -> None:
         SenderDialog(self, sender)
+
+    def open_batch_sender_dialog(self) -> None:
+        BatchSenderDialog(self)
 
     def edit_selected_sender(self) -> None:
         sender = self.selected_sender()
@@ -1039,6 +1043,122 @@ class IronMailApp(Tk):
     @staticmethod
     def _mtime(timestamp: float) -> str:
         return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
+
+
+class BatchSenderDialog(Toplevel):
+    def __init__(self, app: IronMailApp):
+        super().__init__(app)
+        self.app = app
+        self.title("批量新增发件邮箱")
+        self.geometry("760x500")
+        self.minsize(680, 420)
+        self.configure(background=COLORS["surface"])
+        self.transient(app)
+        self._build()
+        self.grab_set()
+        self.text.focus_set()
+
+    def _build(self) -> None:
+        frame = ttk.Frame(self, padding=16, style="Surface.TFrame")
+        frame.grid(row=0, column=0, sticky="nsew")
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        ttk.Label(
+            frame,
+            text=(
+                "粘贴邮箱和 SMTP 密码/应用密码，支持多组同一行或每行一组。"
+                "常见格式：email----密码、email 密码、email,密码、email:密码。"
+            ),
+            wraplength=700,
+            justify="left",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 10))
+
+        self.text = Text(frame, wrap="word", height=16)
+        self.app.configure_text_widget(self.text, monospace=True)
+        self.text.grid(row=1, column=0, sticky="nsew")
+
+        footer = ttk.Frame(frame, style="Toolbar.TFrame")
+        footer.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        ttk.Label(
+            footer,
+            text="保存时会自动跳过重复邮箱；密码不会写入日志或提示内容。",
+            style="Muted.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        footer.columnconfigure(0, weight=1)
+        ttk.Button(footer, text="保存", command=self.save).grid(row=0, column=1, padx=(8, 8))
+        ttk.Button(footer, text="取消", command=self.destroy).grid(row=0, column=2)
+
+    def save(self) -> None:
+        raw_text = self.text.get("1.0", END).strip()
+        if not raw_text:
+            messagebox.showwarning("内容为空", "请先粘贴要新增的邮箱和密码。", parent=self)
+            return
+
+        records, parse_errors = config_manager.parse_sender_batch_text(raw_text)
+        if not records:
+            detail = "\n".join(parse_errors[:8]) if parse_errors else "未识别到可导入的邮箱和密码。"
+            messagebox.showwarning("未识别到账号", detail, parent=self)
+            return
+
+        config = self.app.load_config()
+        seen_in_batch: set[str] = set()
+        added = 0
+        skipped_existing: list[str] = []
+        skipped_duplicate: list[str] = []
+        skipped_failed: list[str] = []
+
+        for record in records:
+            email = record["email"].strip()
+            password = record["password"]
+            email_key = email.lower()
+            if email_key in seen_in_batch:
+                skipped_duplicate.append(email)
+                continue
+            seen_in_batch.add(email_key)
+            if config_manager.find_sender_index(config, email) is not None:
+                skipped_existing.append(email)
+                continue
+
+            sender = config_manager.build_sender(email=email, password=password)
+            defaults = config_manager.smtp_defaults_for_email(email)
+            if defaults != config_manager.DEFAULT_SMTP:
+                sender["smtp"] = defaults
+            try:
+                config_manager.add_sender(config, sender)
+                added += 1
+            except Exception as error:
+                skipped_failed.append(f"{email}: {error}")
+
+        if added:
+            self.app.config = config
+            self.app.save_config()
+            self.app.refresh_all()
+
+        summary = [f"成功新增 {added} 个发件邮箱。"]
+        if skipped_existing:
+            summary.append(f"已存在跳过 {len(skipped_existing)} 个：{self._preview(skipped_existing)}")
+        if skipped_duplicate:
+            summary.append(f"本次粘贴内重复跳过 {len(skipped_duplicate)} 个：{self._preview(skipped_duplicate)}")
+        if parse_errors:
+            summary.append(f"格式未识别 {len(parse_errors)} 条：{self._preview(parse_errors, separator='；')}")
+        if skipped_failed:
+            summary.append(f"保存失败 {len(skipped_failed)} 个：{self._preview(skipped_failed, separator='；')}")
+
+        if added:
+            messagebox.showinfo("批量新增完成", "\n".join(summary), parent=self)
+            self.destroy()
+        else:
+            messagebox.showwarning("没有新增邮箱", "\n".join(summary), parent=self)
+
+    @staticmethod
+    def _preview(items: list[str], limit: int = 5, separator: str = "、") -> str:
+        preview = separator.join(items[:limit])
+        if len(items) > limit:
+            preview += f"{separator}..."
+        return preview
 
 
 class SenderDialog(Toplevel):

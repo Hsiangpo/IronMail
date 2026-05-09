@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,23 @@ DEFAULT_SMTP_PROXY = {
     "candidate_ports": [7897, 7890, 7891, 1080, 1087, 10809],
     "connect_timeout_seconds": 8,
 }
+
+EMAIL_ADDRESS_PATTERN = (
+    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+    r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}"
+)
+EMAIL_RE = re.compile(EMAIL_ADDRESS_PATTERN)
+BATCH_SEPARATOR_PATTERN = r"(?:-{2,}|[—–]+|[:：,，;；|]|\t+|\s+)"
+BATCH_SENDER_PAIR_RE = re.compile(
+    rf"(?P<email>{EMAIL_ADDRESS_PATTERN})\s*"
+    rf"{BATCH_SEPARATOR_PATTERN}\s*"
+    rf"(?P<password>(?!{EMAIL_ADDRESS_PATTERN})[^\s,，;；|]+)"
+)
+BATCH_SINGLE_LINE_RE = re.compile(
+    rf"^\s*.*?(?P<email>{EMAIL_ADDRESS_PATTERN})\s*"
+    rf"{BATCH_SEPARATOR_PATTERN}\s*"
+    rf"(?P<password>.+?)\s*$"
+)
 
 
 def load_config(config_path: str | Path) -> dict[str, Any]:
@@ -84,6 +102,58 @@ def smtp_defaults_for_email(email: str) -> dict[str, Any]:
     """按邮箱域名返回常见SMTP默认值。"""
     domain = email.rsplit("@", 1)[-1].strip().lower() if "@" in email else ""
     return normalize_smtp(PROVIDER_SMTP_DEFAULTS.get(domain, DEFAULT_SMTP))
+
+
+def parse_sender_batch_text(text: str) -> tuple[list[dict[str, str]], list[str]]:
+    """Parse pasted sender accounts into email/password pairs.
+
+    Supports common copy/paste forms such as:
+    email----password, email password, email,password, email:password.
+    """
+    records: list[dict[str, str]] = []
+    errors: list[str] = []
+
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        raw_line = line.strip()
+        if not raw_line:
+            continue
+        email_matches = list(EMAIL_RE.finditer(raw_line))
+        if not email_matches:
+            continue
+
+        parsed_email_spans: list[tuple[int, int]] = []
+        if len(email_matches) == 1:
+            match = BATCH_SINGLE_LINE_RE.match(raw_line)
+            if match:
+                password = clean_batch_password(match.group("password"))
+                if password and not EMAIL_RE.fullmatch(password):
+                    records.append({"email": match.group("email").strip(), "password": password})
+                    parsed_email_spans.append(match.span("email"))
+            if parsed_email_spans:
+                continue
+
+        for match in BATCH_SENDER_PAIR_RE.finditer(raw_line):
+            password = clean_batch_password(match.group("password"))
+            if not password or EMAIL_RE.fullmatch(password):
+                continue
+            records.append({"email": match.group("email").strip(), "password": password})
+            parsed_email_spans.append(match.span("email"))
+
+        for email_match in email_matches:
+            span = email_match.span()
+            if span not in parsed_email_spans:
+                errors.append(f"第 {line_number} 行未识别到密码: {email_match.group(0)}")
+
+    if text.strip() and not records and not errors:
+        errors.append("未识别到可导入的邮箱和密码，请检查粘贴格式。")
+    return records, errors
+
+
+def clean_batch_password(password: str) -> str:
+    """Clean one password value without logging or exposing it."""
+    cleaned = password.strip().strip("'\"").rstrip(".,;；，")
+    cleaned = re.sub(r"^(?:密码|口令|授权码|应用密码|SMTP\s*密码|password)\s*[:：=]\s*", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip().strip("'\"").rstrip(".,;；，")
 
 
 def normalize_smtp_proxy(proxy: dict[str, Any] | None) -> dict[str, Any]:

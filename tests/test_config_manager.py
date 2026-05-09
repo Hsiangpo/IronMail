@@ -165,3 +165,50 @@ def test_mask_sender_hides_password_and_keeps_email():
 
     assert masked["email"] == "sales@oldiron.us"
     assert masked["password"] == "abcd********mnop"
+
+
+def test_parse_sender_batch_text_supports_space_separated_dash_pairs():
+    text = (
+        "oypgqersf4@gmx.com----RXaOu0Fpifo "
+        "xhwhpoxge435@gmx.com----XkzHEjFGDuX "
+        "gmwhvbs7807@gmx.com----CNGCuQKqM6"
+    )
+
+    records, errors = config_manager.parse_sender_batch_text(text)
+
+    assert errors == []
+    assert records == [
+        {"email": "oypgqersf4@gmx.com", "password": "RXaOu0Fpifo"},
+        {"email": "xhwhpoxge435@gmx.com", "password": "XkzHEjFGDuX"},
+        {"email": "gmwhvbs7807@gmx.com", "password": "CNGCuQKqM6"},
+    ]
+
+
+def test_parse_sender_batch_text_supports_common_copy_paste_formats():
+    text = """
+sales@gmx.com----gmxpass
+ops@gmail.com,password123
+admin@example.com password456
+notice@example.net: password789
+label@example.org 密码： quoted-pass
+semi@example.org;semi-pass
+""".strip()
+
+    records, errors = config_manager.parse_sender_batch_text(text)
+
+    assert errors == []
+    assert records == [
+        {"email": "sales@gmx.com", "password": "gmxpass"},
+        {"email": "ops@gmail.com", "password": "password123"},
+        {"email": "admin@example.com", "password": "password456"},
+        {"email": "notice@example.net", "password": "password789"},
+        {"email": "label@example.org", "password": "quoted-pass"},
+        {"email": "semi@example.org", "password": "semi-pass"},
+    ]
+
+
+def test_parse_sender_batch_text_reports_email_without_password():
+    records, errors = config_manager.parse_sender_batch_text("ok@gmx.com----secret missing@example.com")
+
+    assert records == [{"email": "ok@gmx.com", "password": "secret"}]
+    assert errors == ["第 1 行未识别到密码: missing@example.com"]
