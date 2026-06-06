@@ -3,7 +3,9 @@
 import queue
 from pathlib import Path
 
-from ironmail import config_manager, gui
+import pandas as pd
+
+from ironmail import config_manager, gui, send_progress
 
 
 class FakeVar:
@@ -80,3 +82,148 @@ def test_background_failure_callback_keeps_error_text(monkeypatch):
 
     assert messages[0][0] == "任务失败"
     assert "worker failed" in messages[0][1]
+
+
+def _seed_partial_progress(app_dir, data_path):
+    data_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [{"邮箱": "a@example.com"}, {"邮箱": "b@example.com"}, {"邮箱": "c@example.com"}]
+    ).to_excel(data_path, index=False)
+    state = send_progress.load_progress(app_dir, data_path, None)
+    send_progress.mark_row_completed(state, send_progress.row_key(0, "a@example.com"), "success")
+    return state
+
+
+def test_prepare_progress_state_resume_keeps_completed(monkeypatch, tmp_path):
+    app = object.__new__(gui.IronMailApp)
+    app.app_dir = tmp_path
+    data_path = tmp_path / "Mails" / "收件名单" / "名单.xlsx"
+    _seed_partial_progress(tmp_path, data_path)
+    monkeypatch.setattr(gui.messagebox, "askyesnocancel", lambda *a, **k: True)
+
+    state = gui.IronMailApp.prepare_progress_state(app, data_path, None, 3)
+
+    assert state is not None
+    assert len(state["completed_rows"]) == 1
+
+
+def test_prepare_progress_state_restart_resets(monkeypatch, tmp_path):
+    app = object.__new__(gui.IronMailApp)
+    app.app_dir = tmp_path
+    data_path = tmp_path / "Mails" / "收件名单" / "名单.xlsx"
+    _seed_partial_progress(tmp_path, data_path)
+    monkeypatch.setattr(gui.messagebox, "askyesnocancel", lambda *a, **k: False)
+
+    state = gui.IronMailApp.prepare_progress_state(app, data_path, None, 3)
+
+    assert state is not None
+    assert state["completed_rows"] == {}
+
+
+def test_prepare_progress_state_cancel_returns_none(monkeypatch, tmp_path):
+    app = object.__new__(gui.IronMailApp)
+    app.app_dir = tmp_path
+    data_path = tmp_path / "Mails" / "收件名单" / "名单.xlsx"
+    _seed_partial_progress(tmp_path, data_path)
+    monkeypatch.setattr(gui.messagebox, "askyesnocancel", lambda *a, **k: None)
+
+    state = gui.IronMailApp.prepare_progress_state(app, data_path, None, 3)
+
+    assert state is None
+
+
+def _make_send_app(tmp_path):
+    """A bare IronMailApp with the Tk-touching hooks stubbed out for send_worker tests."""
+    app = object.__new__(gui.IronMailApp)
+    app.app_dir = tmp_path
+    app._post = lambda fn: None          # skip progress bar / status var widget updates
+    app.gui_log = lambda message: None   # skip Tk text widget + log-file writes
+    return app
+
+
+def _send_config(senders, **settings):
+    base = {"delay_seconds": 0, "max_retries": 1, "emails_per_account": 1}
+    base.update(settings)
+    return config_manager.normalize_config({"senders": senders, "settings": base})
+
+
+def test_send_worker_sends_each_row_and_marks_progress(monkeypatch, tmp_path):
+    app = _make_send_app(tmp_path)
+    sent = []
+    monkeypatch.setattr(
+        gui.mailer,
+        "send_email",
+        lambda smtp, sender, to, subject, body, sender_name=None: sent.append((sender["email"], to)) or True,
+    )
+    config = _send_config([{"email": "s@gmail.com", "password": "p"}])
+    senders = config_manager.active_senders(config)
+    df = pd.DataFrame(
+        [
+            {"邮箱": "a@example.com", "邮件主题": "主题", "邮件正文": "正文"},
+            {"邮箱": "b@example.com", "邮件主题": "主题", "邮件正文": "正文"},
+        ]
+    )
+    data_path = tmp_path / "名单.xlsx"
+    df.to_excel(data_path, index=False)
+    state = send_progress.load_progress(tmp_path, data_path, None)
+
+    gui.IronMailApp.send_worker(app, config, senders, df, data_path, None, state)
+
+    assert sent == [("s@gmail.com", "a@example.com"), ("s@gmail.com", "b@example.com")]
+    assert send_progress.is_row_completed(state, send_progress.row_key(0, "a@example.com"))
+    assert send_progress.is_row_completed(state, send_progress.row_key(1, "b@example.com"))
+
+
+def test_send_worker_fails_over_to_next_sender(monkeypatch, tmp_path):
+    app = _make_send_app(tmp_path)
+    attempts = []
+
+    def flaky(smtp, sender, to, subject, body, sender_name=None):
+        attempts.append((sender["email"], to))
+        if sender["email"] == "primary@gmail.com":
+            raise OSError("rejected")
+        return True
+
+    monkeypatch.setattr(gui.mailer, "send_email", flaky)
+    config = _send_config(
+        [
+            {"email": "primary@gmail.com", "password": "p"},
+            {"email": "backup@gmail.com", "password": "p"},
+        ]
+    )
+    senders = config_manager.active_senders(config)
+    df = pd.DataFrame([{"邮箱": "a@example.com", "邮件主题": "x", "邮件正文": "y"}])
+    data_path = tmp_path / "名单.xlsx"
+    df.to_excel(data_path, index=False)
+    state = send_progress.load_progress(tmp_path, data_path, None)
+
+    gui.IronMailApp.send_worker(app, config, senders, df, data_path, None, state)
+
+    assert attempts == [("primary@gmail.com", "a@example.com"), ("backup@gmail.com", "a@example.com")]
+    assert send_progress.is_row_completed(state, send_progress.row_key(0, "a@example.com"))
+
+
+def test_send_worker_skips_rows_already_in_progress(monkeypatch, tmp_path):
+    app = _make_send_app(tmp_path)
+    sent = []
+    monkeypatch.setattr(
+        gui.mailer,
+        "send_email",
+        lambda smtp, sender, to, subject, body, sender_name=None: sent.append(to) or True,
+    )
+    config = _send_config([{"email": "s@gmail.com", "password": "p"}])
+    senders = config_manager.active_senders(config)
+    df = pd.DataFrame(
+        [
+            {"邮箱": "done@example.com", "邮件主题": "x", "邮件正文": "y"},
+            {"邮箱": "new@example.com", "邮件主题": "x", "邮件正文": "y"},
+        ]
+    )
+    data_path = tmp_path / "名单.xlsx"
+    df.to_excel(data_path, index=False)
+    state = send_progress.load_progress(tmp_path, data_path, None)
+    send_progress.mark_row_completed(state, send_progress.row_key(0, "done@example.com"), "success")
+
+    gui.IronMailApp.send_worker(app, config, senders, df, data_path, None, state)
+
+    assert sent == ["new@example.com"]
